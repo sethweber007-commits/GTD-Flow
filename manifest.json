@@ -1,0 +1,17 @@
+{
+  "name": "GTD Flow",
+  "short_name": "GTD Flow",
+  "description": "A complete Getting Things Done (GTD) app with Inbox, Clarify, Next Actions, Projects, Waiting For, Someday/Maybe, Calendar/Tickler, Reference, Weekly Review, and Horizons of Focus — backed up automatically to your Google Drive.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f5",
+  "theme_color": "#1b6f6f",
+  "orientation": "any",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
