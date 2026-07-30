@@ -115,6 +115,45 @@ time.
 
 ---
 
+## 3. Enabling Google Calendar sync
+
+Calendar & Tickler can push Scheduled events and Ticklers to a real Google
+Calendar automatically. It's a completely separate connection from Drive
+backup — its own "Connect Google Calendar" button in Settings, its own
+consent screen — but it reuses the **same OAuth Client ID** you already
+created in step 2 above. If you haven't done step 2 yet, do that first; you
+only need to create one OAuth client for the whole app.
+
+1. Back in **[console.cloud.google.com](https://console.cloud.google.com/)**,
+   with the same project selected, go to **APIs & Services → Library**.
+   Search for **"Google Calendar API"** and click **Enable** (this is a
+   separate API from Drive — you need both enabled).
+2. Go to **APIs & Services → OAuth consent screen** → **Audience** (or
+   **Scopes**, depending on the current console layout) → **Add or Remove
+   Scopes**. Search for `calendar.events`, check
+   `.../auth/calendar.events` → **Update** → **Save**.
+   - Unlike `drive.file`, this scope is considered "sensitive" by Google —
+     it can create, edit, and delete events. That doesn't change anything
+     about this setup: it still works the same way for the test users
+     you've already added, with the same "Google hasn't verified this app"
+     click-through. It would only require Google's formal verification
+     review if you later published the app for the general public.
+3. That's it for Cloud Console — no new OAuth client needed, no new
+   redirect URIs. `js/config.js` already points at the right scope
+   (`GOOGLE_CALENDAR_SCOPE`) and calendar (`GOOGLE_CALENDAR_ID: 'primary'`,
+   your main calendar) by default.
+4. Reload the app, go to **Settings → 📅 Google Calendar sync → Connect
+   Google Calendar**, and approve the consent screen — you'll see the same
+   "unverified app" click-through as Drive; that's expected. Approving it
+   immediately pushes any existing Scheduled events/Ticklers to your
+   calendar, and every new one from then on syncs automatically.
+
+To disconnect later, use **Disconnect** in that same card — it only revokes
+this app's access token; it does not delete any events already created on
+your calendar.
+
+---
+
 ## Updating the app later
 
 Just edit the files and re-deploy (re-push to GitHub / re-drag to
@@ -137,3 +176,40 @@ database open) and **Erase local data & start fresh** (deletes this app's
 local data on this device only; your Google Drive backup, if connected, is
 untouched — reconnect and use "Restore latest backup" in Settings to bring
 your data back).
+
+**"This app has not completed the Google verification process" (hard block,
+no "Continue" option)** — this happens for both the Drive and Calendar
+connections and almost always means the Google account you're signing in
+with isn't on the **Test users** list for the OAuth consent screen. Go to
+**APIs & Services → OAuth consent screen → Audience** and add that exact
+email. If it's a work/school Google account rather than a personal one,
+your organization's admin may block unverified third-party apps entirely —
+try a personal `@gmail.com` account instead. Separately, make sure whatever
+URL you're testing from (`http://localhost:8080`, your GitHub Pages/Netlify
+URL, etc.) is listed under **Authorized JavaScript origins** on the OAuth
+client in **APIs & Services → Credentials**.
+
+**Calendar events aren't showing up after connecting** — click **Sync now**
+in the Google Calendar sync card in Settings; it re-pushes everything.
+If that doesn't help, check the browser console for errors — a common cause
+is forgetting to enable the **Google Calendar API** itself (separate toggle
+from adding the `calendar.events` scope) in step 3 above.
+
+**Keeps asking to sign in to Google again** — as of this version, staying
+signed in across a page reload no longer depends on Google's own
+silent-refresh at all: your access token is cached in the browser's
+`sessionStorage` the moment you connect, so reloading the app (same tab or
+installed-app window) restores the connection instantly with no network
+round trip and no chance of Google's silent flow failing. You should now
+only ever see the sign-in screen again after fully closing the tab/app (this
+clears `sessionStorage`) and reopening it later — and even then, the app
+first tries a silent Google reconnect (using FedCM) before falling back to
+asking you to click "Connect" again. If a page reload is still forcing a
+full sign-in after updating to this version, that's a bug — check the
+browser console for errors, and note that private/incognito windows clear
+`sessionStorage` more aggressively in some browsers, which can defeat this.
+Also, since this app has no backend, Google never issues it a long-lived
+refresh token — the access token itself still expires roughly every hour;
+the app refreshes it automatically in the background while open, but after
+the app has been fully closed for a long stretch, one fresh consent click is
+normal and expected, not a bug.
