@@ -194,21 +194,22 @@ body {
 }
 
 /* Type-to-search project picker (item form's "Project" field, Clarify's
-   "Add to project" step) — see projectPicker() in utils.js. */
+   "Add to project" step) — see projectPicker() in utils.js. Deliberately
+   laid out in normal document flow (not an absolutely-positioned overlay):
+   Clarify's card is short enough that an overlay would sit directly on top
+   of the Action/Waiting on/Info buttons right below the field, hiding them
+   whenever the dropdown is open — pushing the rest of the card down instead
+   keeps everything reachable. */
 .project-picker { position: relative; }
 .project-picker-dropdown {
   display: none;
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  margin-top: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
   max-height: 220px;
   overflow-y: auto;
-  z-index: 10;
 }
 .project-picker-dropdown.open { display: block; }
 .project-picker-option {

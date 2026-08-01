@@ -173,8 +173,12 @@ export function projectPicker({ projects, selectedId = null, name = 'projectId',
   input.addEventListener('input', () => { hidden.value = ''; renderDropdown(); });
   input.addEventListener('blur', () => setTimeout(() => {
     closeDropdown();
+    // Revert stray typed text that was never actually selected from the
+    // dropdown back to whatever was last confirmed (nothing, if the field
+    // started blank and nothing was ever picked) — never guess by falling
+    // back to an arbitrary project just because one exists.
     if (input.value !== (confirmed ? confirmed.title : '')) {
-      selectProject(allowEmpty ? confirmed : confirmed || projects[0] || null);
+      selectProject(confirmed);
     }
   }, 150));
   input.addEventListener('keydown', (e) => {
@@ -223,6 +227,7 @@ export function projectPicker({ projects, selectedId = null, name = 'projectId',
     get() { return hidden.value; },
     set(v) { selectProject(projects.find((p) => p.id === v) || null); },
   });
+  wrap.focus = (opts) => input.focus(opts);
 
   return wrap;
 }

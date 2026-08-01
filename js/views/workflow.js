@@ -171,7 +171,7 @@ export async function renderClarify() {
   }
 
   function projectSelect() {
-    return projectPicker({ projects, selectedId: projects[0]?.id, allowEmpty: false, className: 'clarify-input' });
+    return projectPicker({ projects, selectedId: null, allowEmpty: false, className: 'clarify-input' });
   }
 
   function waitingInlineForm(projectId) {
@@ -253,16 +253,37 @@ export async function renderClarify() {
       card.appendChild(el('p', {}, 'Which project, and what kind of item?'));
       const select = projectSelect();
       card.appendChild(select);
+      // Ready to type into immediately — no need to click into the field
+      // first. requestAnimationFrame so it runs after `select` is actually
+      // attached to the document (card is already live in the DOM by the
+      // time this step is reached — see renderClarify()'s initial render).
+      requestAnimationFrame(() => select.focus());
+
+      // Requires an actual project pick before proceeding — the field now
+      // starts blank instead of defaulting to the first project, so this
+      // guards against the buttons below silently saving with no project
+      // linked if someone clicks one before searching/selecting.
+      function withProject(fn) {
+        return () => {
+          if (!select.value) {
+            toast('Search and pick a project first', 'error');
+            select.focus();
+            return;
+          }
+          fn();
+        };
+      }
+
       card.appendChild(el('div', { class: 'clarify-options' }, [
-        el('button', { class: 'btn btn-choice', onclick: () => finish(async () => {
+        el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
           // Linked straight to a project — gated off Next Actions until
           // Activated from the project page, same as via the item form.
           await DB.put('items', { ...current, type: 'next-action', projectId: select.value, activated: false });
-        }, true) }, iconLabel('checkCircle', 'Action', 16)),
-        el('button', { class: 'btn btn-choice', onclick: () => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); } }, iconLabel('clock', 'Waiting on', 16)),
-        el('button', { class: 'btn btn-choice', onclick: () => finish(async () => {
+        }, true)) }, iconLabel('checkCircle', 'Action', 16)),
+        el('button', { class: 'btn btn-choice', onclick: withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); }) }, iconLabel('clock', 'Waiting on', 16)),
+        el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
           await DB.put('items', { ...current, type: 'project-note', projectId: select.value });
-        }, true) }, iconLabel('info', 'Info', 16)),
+        }, true)) }, iconLabel('info', 'Info', 16)),
       ]));
       card.appendChild(backBtn(() => { state.step = 'menu'; renderStep(); }));
     } else if (state.step === 'project-waiting') {
