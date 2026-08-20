@@ -28,6 +28,7 @@ export async function renderSettings() {
   const statusRow = el('p', { class: 'item-notes' });
   const btnRow = el('div', { class: 'form-actions form-actions-left' });
   driveCard.appendChild(statusRow);
+  driveCard.appendChild(el('p', { class: 'hint' }, 'Once connected, this syncs automatically in the background — after every change, whenever you reopen the app, and every few minutes while it’s open. "Sync now" is only there for an immediate on-demand sync.'));
   driveCard.appendChild(btnRow);
   r.appendChild(driveCard);
 
@@ -105,34 +106,6 @@ export async function renderSettings() {
   Drive.reconnectIfNeeded()
     .catch((e) => console.warn('Drive reconnect:', e.message))
     .then(() => GCal.reconnectIfNeeded().catch((e) => console.warn('Calendar reconnect:', e.message)));
-
-  // --- Contexts ---
-  const contexts = await DB.getAll('contexts');
-  const ctxCard = el('div', { class: 'card' }, [cardTitle('tag', 'Contexts')]);
-  const ctxList = el('div', { class: 'chip-list' });
-  contexts.forEach((c) => {
-    ctxList.appendChild(
-      el('span', { class: 'chip' }, [
-        c.icon ? `${c.icon} ${c.name}` : c.name,
-        el('button', { class: 'chip-remove', onclick: async () => { await DB.remove('contexts', c.id); renderSettings(); } }, '×'),
-      ])
-    );
-  });
-  ctxCard.appendChild(ctxList);
-  const addCtxForm = el('form', { class: 'inline-form' }, [
-    el('input', { type: 'text', name: 'name', placeholder: '@NewContext' }),
-    el('button', { class: 'btn btn-small', type: 'submit' }, 'Add'),
-  ]);
-  addCtxForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(addCtxForm);
-    const name = fd.get('name')?.toString().trim();
-    if (!name) return;
-    await DB.add('contexts', { name: name.startsWith('@') ? name : '@' + name, icon: '' });
-    renderSettings();
-  });
-  ctxCard.appendChild(addCtxForm);
-  r.appendChild(ctxCard);
 
   // --- Local backup (belt & suspenders alongside Drive) ---
   const localCard = el('div', { class: 'card' }, [

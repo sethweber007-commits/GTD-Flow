@@ -109,6 +109,8 @@ body {
   display: none;
 }
 .nav-link.active .badge-count { background: rgba(255,255,255,0.3); }
+.badge-count-neutral { background: var(--primary-light); color: var(--primary-dark); }
+.nav-link.active .badge-count-neutral { background: rgba(255,255,255,0.3); color: #fff; }
 
 #view-root {
   grid-area: main;

@@ -24,6 +24,13 @@ export const CONFIG = {
   // Milliseconds to wait after the last data change before pushing a backup.
   BACKUP_DEBOUNCE_MS: 15000,
 
+  // Milliseconds between background sync sweeps while the app is open and
+  // Drive is connected — a safety net alongside the event-driven sync
+  // (on change, on reconnect, on regaining connectivity, on the app coming
+  // back to the foreground) so two devices left open stay caught up with
+  // each other even during a long idle stretch with no local edits.
+  AUTO_SYNC_INTERVAL_MS: 5 * 60 * 1000,
+
   // The Calendar API scope requested for Calendar & Tickler sync. This is a
   // "sensitive" scope (it can create/edit/delete events), unlike drive.file
   // — it works the same way in Google Cloud Console though: enable the

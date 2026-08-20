@@ -22,17 +22,21 @@ a folder in your own Google Drive.
   **Waiting On** entry inline, right in the wizard, with no extra dialog.
   Non-actionable items can also be filed as **Project Info** against an
   existing project.
-- **Next Actions** — grouped by context (@Calls, @Computer, @Errands, @Home,
-  @Office, @Anywhere, @Agendas, @Waiting, or your own custom contexts), and
-  further groupable into your own custom **sections** (e.g. "Deep Work",
-  "Quick Wins") via "+ Add section".
+- **Next Actions** — grouped by context: just type a context (e.g. `@Calls`,
+  `@Errands`) into an action's Context field — there's no fixed list to
+  manage, contexts are whatever you've actually used, with autocomplete from
+  previous ones as you type.
 - **Projects** — any outcome needing more than one step. Each project page
   is organized into three subsections — **Next Actions**, **Waiting On**,
   and **Project Info** (for non-actionable reference material tied to that
   project, e.g. confirmation numbers or account details) — each with its
-  own "+ Add" button. The project list shows a "stalled" warning when an
-  active project has no open next action or waiting-on item (project info
-  doesn't count). From Clarify, turning an inbox item into a project
+  own "+ Add" button. The first action added to a project is placed
+  straight onto the Next Actions list automatically; once a project already
+  has an active action, further ones start off the list until you tap
+  "Activate" — so a project is never left stalled for want of its one
+  action being switched on. The project list shows a "stalled" warning when
+  an active project has no open next action or waiting-on item (project
+  info doesn't count). From Clarify, turning an inbox item into a project
   defaults the project title to the item's text, and lets you add its
   first next action immediately or leave it for later.
 - **Waiting For** — things delegated or expected from other people,
@@ -64,15 +68,23 @@ level as an expandable section, so you can see the whole picture at once:
 - **Areas of Focus & Accountability** (10,000 ft)
 - *(Projects and Next Actions above serve as the Runway and Ground level.)*
 
-**Backup**
-- Automatic, debounced backup to Google Drive (via your own free OAuth
-  client — see `SETUP.md`) using the narrow `drive.file` scope, so the app
-  can only ever touch files it created.
-- Manual "Back up now" / "Restore latest backup" in Settings.
+**Sync & Backup**
+- Automatic two-way sync to Google Drive (via your own free OAuth client —
+  see `SETUP.md`) using the narrow `drive.file` scope, so the app can only
+  ever touch files it created. Once connected, it syncs on its own — after
+  every change, whenever the app regains connectivity or comes back to the
+  foreground, and every few minutes in the background — so multiple devices
+  signed into the same Drive stay caught up with each other with no manual
+  step.
+- Manual "Sync now" / "Back up now" / "Restore latest backup" in Settings
+  for an immediate, on-demand sync.
 - A local export/import `.json` file as a second safety net, independent
   of Drive.
 
 **PWA essentials**
+- Live item-count badges in the left nav for Inbox, Next Actions, Projects,
+  and Waiting For, so you can see at a glance how much is on each list
+  without opening it.
 - Installable to your home screen / desktop (`manifest.json` + install
   button), with a modern "GTD" lettermark as the app icon/logo.
 - A cohesive set of sleek inline-SVG line icons throughout the nav and UI
@@ -119,8 +131,10 @@ gtd-pwa/
 │   ├── router.js            Tiny hash router
 │   ├── db.js                IndexedDB data layer
 │   ├── drive.js              Google Drive backup
+│   ├── sync.js                Two-way Drive sync (merge + auto-sync triggers)
+│   ├── gcal.js                  One-way Google Calendar sync
 │   ├── config.js              ← put your Google Client ID here
-│   ├── seed.js                 Default contexts / first-run data
+│   ├── seed.js                 First-run data
 │   ├── modal.js                 Reusable modal + item/project/section forms
 │   ├── utils.js                  Small shared helpers (incl. .md export)
 │   ├── icons.js                   Inline-SVG icon set

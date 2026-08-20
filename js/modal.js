@@ -6,6 +6,18 @@ function host() {
   return document.getElementById('modal-host');
 }
 
+// True if the given project already has at least one open, activated next
+// action (i.e. something already showing on the global Next Actions list).
+// Used so that adding an action to a project auto-activates it straight
+// onto Next Actions when it would otherwise be the project's only one —
+// projects should never look "stalled" just because their sole action is
+// sitting un-activated.
+export async function projectHasActiveAction(projectId) {
+  if (!projectId) return false;
+  const items = await DB.getByIndex('items', 'projectId', projectId);
+  return items.some((i) => i.type === 'next-action' && !i.completed && i.activated !== false);
+}
+
 let stopKeyboardAvoidance = null;
 
 export function closeModal() {
@@ -99,9 +111,9 @@ function wireKeyboardAvoidance(hostEl) {
 
 // -- Item form (used by Inbox, Next Actions, Waiting For, Someday, Calendar, Reference) --
 export async function openItemForm({ item = null, type, defaults = {}, onSaved, focusSection = false }) {
-  const contexts = await DB.getAll('contexts');
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
-  const sections = ['next-action', 'someday'].includes(type) ? await DB.getByIndex('sections', 'view', type) : [];
+  const sections = type === 'someday' ? await DB.getByIndex('sections', 'view', type) : [];
+  const contextSuggestions = type === 'next-action' || type === 'waiting-for' ? await distinctContexts() : [];
   const isEdit = !!item;
   const data = item || { type, title: '', notes: '', ...defaults };
   const calendarFields = type === 'calendar' ? buildCalendarDateFields(data) : null;
@@ -111,11 +123,11 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     field('Title', el('input', { type: 'text', name: 'title', required: true, value: data.title || '', placeholder: 'What is it?' })),
 
     type === 'next-action' || type === 'waiting-for'
-      ? field('Context', selectEl('context', contexts.map((c) => c.name), data.context))
+      ? field('Context', contextFieldEl(contextSuggestions, data.context))
       : null,
 
-    ['next-action', 'someday'].includes(type)
-      ? field(type === 'someday' ? 'Category (optional)' : 'Section (optional)', sectionFieldEl(sections, data.sectionId))
+    type === 'someday'
+      ? field('Category (optional)', sectionFieldEl(sections, data.sectionId))
       : null,
 
     ['next-action', 'waiting-for', 'someday', 'calendar'].includes(type)
@@ -132,9 +144,6 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     type === 'someday' ? field('Revisit on (tickler, optional)', el('input', { type: 'date', name: 'tickleDate', value: (data.tickleDate || '').slice(0, 10) })) : null,
 
     type === 'reference' ? field('Category / topic', el('input', { type: 'text', name: 'category', value: data.category || '', placeholder: 'e.g. Taxes, Recipes, Travel' })) : null,
-
-    ['next-action'].includes(type) ? field('Est. time', selectEl('timeEstimate', ['', '<5 min', '15 min', '30 min', '1 hr', '2+ hr'], data.timeEstimate)) : null,
-    ['next-action'].includes(type) ? field('Energy', selectEl('energy', ['', 'Low', 'Medium', 'High'], data.energy)) : null,
 
     field('Notes', el('textarea', { name: 'notes', rows: 3, placeholder: 'Details, links, context…' }, data.notes || '')),
 
@@ -189,23 +198,22 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     }
     if (fd.has('tickleDate')) record.tickleDate = fd.get('tickleDate') ? new Date(fd.get('tickleDate')).toISOString() : null;
     if (fd.has('category')) record.category = fd.get('category') || '';
-    if (fd.has('timeEstimate')) record.timeEstimate = fd.get('timeEstimate') || '';
-    if (fd.has('energy')) record.energy = fd.get('energy') || '';
 
     // Actions linked to a project are gated off the global Next Actions list
-    // until explicitly "Activated" from the project page — they still show
-    // up in the project's own Next Actions subsection right away. A brand
-    // new project-linked action starts un-activated; a standalone action
-    // (no project) is unaffected and stays visible as before. On edit, only
-    // flip the flag when the project link is actually added or removed just
-    // now — leave it alone otherwise, so re-saving an already-activated
-    // project action (or one someone deliberately activated already)
-    // doesn't silently re-hide or re-show it.
+    // until explicitly "Activated" from the project page — unless the
+    // project has no other active action yet, in which case this one is
+    // activated automatically (a project should never sit stalled just
+    // because its one action needs a manual activation step). A standalone
+    // action (no project) is unaffected and stays visible as before. On
+    // edit, only re-decide the flag when the project link is actually added
+    // or removed just now — leave it alone otherwise, so re-saving an
+    // already-activated project action (or one someone deliberately
+    // activated already) doesn't silently re-hide or re-show it.
     if (type === 'next-action') {
       if (!isEdit) {
-        record.activated = !record.projectId;
+        record.activated = record.projectId ? !(await projectHasActiveAction(record.projectId)) : true;
       } else if (!data.projectId && record.projectId) {
-        record.activated = false;
+        record.activated = !(await projectHasActiveAction(record.projectId));
       } else if (data.projectId && !record.projectId) {
         record.activated = true;
       }
@@ -379,9 +387,29 @@ function field(labelText, inputEl) {
   return el('label', { class: 'field' }, [el('span', {}, labelText), inputEl]);
 }
 
-// Section/category picker used by Next Actions and Someday/Maybe: pick an
-// existing section, or choose "+ Create new…" to reveal a text input for a
-// brand-new one (created on submit). Shown even when no sections exist yet.
+// Distinct context strings already used on any item, for the Context
+// field's suggestion list — there's no separate managed list of contexts
+// any more, just whatever people have actually typed so far.
+async function distinctContexts() {
+  const items = await DB.getAll('items');
+  const set = new Set();
+  items.forEach((i) => { if (i.context) set.add(i.context); });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// Free-text context field with a <datalist> of previously-used contexts as
+// suggestions — typing a new one (e.g. "@Calls") just works, no separate
+// "manage contexts" list to keep in sync.
+function contextFieldEl(suggestions, value) {
+  const listId = 'context-suggestions-' + uid();
+  const input = el('input', { type: 'text', name: 'context', list: listId, value: value || '', placeholder: 'e.g. @Calls, @Computer, @Errands…' });
+  const datalist = el('datalist', { id: listId }, suggestions.map((c) => el('option', { value: c })));
+  return el('div', {}, [input, datalist]);
+}
+
+// Category picker used by Someday/Maybe: pick an existing section, or
+// choose "+ Create new…" to reveal a text input for a brand-new one
+// (created on submit). Shown even when no sections exist yet.
 function sectionFieldEl(sections, selectedId) {
   const wrap = el('div', { class: 'section-field' });
   const sel = el('select', { name: 'sectionName' });

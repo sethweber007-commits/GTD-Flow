@@ -46,8 +46,8 @@ async function main() {
   startRouter();
   wireNav();
   wireInstallPrompt();
-  updateInboxBadge();
-  DB.onChange(() => updateInboxBadge());
+  updateNavBadges();
+  DB.onChange(() => updateNavBadges());
 
   // Boot-safe: init() only ever reuses a still-valid token cached in
   // localStorage from an earlier explicit sign-in — it never requests a
@@ -80,12 +80,28 @@ function wireNav() {
   );
 }
 
-async function updateInboxBadge() {
-  const badge = document.getElementById('inbox-badge');
+function paintBadge(id, count) {
+  const badge = document.getElementById(id);
   if (!badge) return;
-  const items = await DB.getByIndex('items', 'type', 'inbox');
-  badge.textContent = items.length || '';
-  badge.style.display = items.length ? 'inline-block' : 'none';
+  badge.textContent = count || '';
+  badge.style.display = count ? 'inline-block' : 'none';
+}
+
+// Sidebar counters: Inbox counts everything waiting to be clarified; Next
+// Actions and Waiting For count what's actually open on those lists (same
+// filters those views use); Projects counts active (in-progress) projects —
+// on-hold/someday/completed projects aren't part of the current working set.
+async function updateNavBadges() {
+  const [inboxItems, allActions, waitingItems, projects] = await Promise.all([
+    DB.getByIndex('items', 'type', 'inbox'),
+    DB.getByIndex('items', 'type', 'next-action'),
+    DB.getByIndex('items', 'type', 'waiting-for'),
+    DB.getAll('projects'),
+  ]);
+  paintBadge('inbox-badge', inboxItems.length);
+  paintBadge('next-actions-badge', allActions.filter((i) => !i.completed && i.activated !== false).length);
+  paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
+  paintBadge('projects-badge', projects.filter((p) => p.status === 'active').length);
 }
 
 let deferredInstallPrompt = null;

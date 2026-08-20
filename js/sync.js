@@ -130,5 +130,14 @@ export const Sync = {
     onAppVisible(() => {
       this.syncNow().catch((e) => console.error('Visibility sync failed', e));
     });
+
+    // Belt-and-suspenders periodic sweep: catches drift between devices left
+    // open for a long stretch with no local edits, no visibility change, and
+    // no online/offline transition on this device to otherwise trigger one.
+    // A no-op (and cheap) whenever Drive isn't connected — see _run()'s
+    // early return.
+    setInterval(() => {
+      this.syncNow().catch((e) => console.error('Periodic sync failed', e));
+    }, CONFIG.AUTO_SYNC_INTERVAL_MS);
   },
 };

@@ -8,7 +8,6 @@ const DB_VERSION = 3;
 const STORES = {
   items: { keyPath: 'id', indexes: ['type', 'context', 'projectId', 'tickleDate', 'calendarDate', 'completed', 'category', 'sectionId'] },
   projects: { keyPath: 'id', indexes: ['status', 'areaOfFocusId'] },
-  contexts: { keyPath: 'id', indexes: [] },
   sections: { keyPath: 'id', indexes: ['view'] },
   areasOfFocus: { keyPath: 'id', indexes: [] },
   goals: { keyPath: 'id', indexes: ['areaOfFocusId', 'status'] },

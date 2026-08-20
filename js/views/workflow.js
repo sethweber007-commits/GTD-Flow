@@ -1,6 +1,6 @@
 import { DB } from '../db.js';
 import { el, toast, formatDate, formatCalendarDateTime, isPast, isToday, downloadTextFile, mdEscape, projectPicker } from '../utils.js';
-import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection } from '../modal.js';
+import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection, projectHasActiveAction } from '../modal.js';
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
 import { GCal } from '../gcal.js';
@@ -276,9 +276,11 @@ export async function renderClarify() {
 
       card.appendChild(el('div', { class: 'clarify-options' }, [
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
-          // Linked straight to a project — gated off Next Actions until
-          // Activated from the project page, same as via the item form.
-          await DB.put('items', { ...current, type: 'next-action', projectId: select.value, activated: false });
+          // Linked straight to a project — auto-activated onto Next Actions
+          // if the project has no other active action yet, same rule as the
+          // item form (see projectHasActiveAction in modal.js).
+          const activated = !(await projectHasActiveAction(select.value));
+          await DB.put('items', { ...current, type: 'next-action', projectId: select.value, activated });
         }, true)) }, iconLabel('checkCircle', 'Action', 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); }) }, iconLabel('clock', 'Waiting on', 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
@@ -339,19 +341,16 @@ export async function renderNextActions() {
   const completedItems = allItems
     .filter((i) => i.completed)
     .sort((a, b) => new Date(b.completedAt || b.createdAt) - new Date(a.completedAt || a.createdAt));
-  const contexts = await DB.getAll('contexts');
   const projects = await DB.getAll('projects');
-  const sections = await DB.getByIndex('sections', 'view', 'next-action');
   const r = root();
   r.innerHTML = '';
   r.appendChild(
     pageHeader('Next Actions', 'Everything you could do right now, organized by context.', [
-      el('button', { class: 'btn btn-ghost', onclick: () => openSectionForm({ view: 'next-action', onSaved: () => refresh(renderNextActions) }) }, iconLabel('section', 'Add section')),
       el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'next-action', onSaved: () => refresh(renderNextActions) }) }, iconLabel('plus', 'Add action')),
     ])
   );
 
-  if (!items.length && !sections.length && !completedItems.length) {
+  if (!items.length && !completedItems.length) {
     r.appendChild(emptyState('No next actions yet. Add one above, or clarify your inbox.'));
     return;
   }
@@ -363,7 +362,10 @@ export async function renderNextActions() {
       if (!byContext.has(key)) byContext.set(key, []);
       byContext.get(key).push(i);
     });
-    const order = [...contexts.map((c) => c.name), 'No context'].filter((c, idx, arr) => arr.indexOf(c) === idx);
+    // Contexts are free-form now (typed per action, no fixed list) — order
+    // them alphabetically, with "No context" always last.
+    const order = [...byContext.keys()].filter((c) => c !== 'No context').sort((a, b) => a.localeCompare(b));
+    if (byContext.has('No context')) order.push('No context');
     order.forEach((ctx) => {
       const group = byContext.get(ctx);
       if (!group || !group.length) return;
@@ -374,10 +376,8 @@ export async function renderNextActions() {
       const list = el('div', { class: 'list' });
       group.forEach((item) => {
         const proj = projects.find((p) => p.id === item.projectId);
-        const metaBits = [item.timeEstimate, item.energy].filter(Boolean).join(' · ');
         list.appendChild(
           itemRow(item, {
-            meta: metaBits,
             projectLabel: proj ? proj.title : null,
             onComplete: async (it) => {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
@@ -394,42 +394,7 @@ export async function renderNextActions() {
     });
   }
 
-  function sectionControls(view, section, groupItems, onDone) {
-    return el('span', { class: 'section-controls' }, [
-      el('button', { class: 'icon-btn', title: 'Rename section', html: iconSvg('edit', 14), onclick: () => openSectionForm({ view, section, onSaved: onDone }) }),
-      el('button', { class: 'icon-btn', title: 'Delete section', html: iconSvg('trash', 14), onclick: async () => {
-        if (await confirmModal(`Delete section "${section.name}"? Its items move to "No section".`)) {
-          for (const it of groupItems) await DB.put('items', { ...it, sectionId: null });
-          await DB.remove('sections', section.id);
-          onDone();
-        }
-      } }),
-    ]);
-  }
-
-  sections.forEach((section) => {
-    const groupItems = items.filter((i) => i.sectionId === section.id);
-    const wrap = el('div', { class: 'section-group' });
-    wrap.appendChild(
-      el('div', { class: 'section-group-heading' }, [
-        el('span', { html: iconSvg('section', 16) }),
-        el('span', {}, `${section.name} (${groupItems.length})`),
-        sectionControls('next-action', section, groupItems, () => refresh(renderNextActions)),
-      ])
-    );
-    if (groupItems.length) {
-      renderContextGroups(wrap, groupItems);
-    } else {
-      wrap.appendChild(el('div', { class: 'empty-state empty-state-small' }, 'No actions in this section yet — assign one via its Section field.'));
-    }
-    r.appendChild(wrap);
-  });
-
-  const unsectioned = items.filter((i) => !i.sectionId || !sections.find((s) => s.id === i.sectionId));
-  if (unsectioned.length) {
-    if (sections.length) r.appendChild(el('div', { class: 'section-group-heading' }, [el('span', {}, 'No section')]));
-    renderContextGroups(r, unsectioned);
-  }
+  renderContextGroups(r, items);
 
   if (completedItems.length) {
     // Collapsed by default — done work shouldn't compete for attention with
@@ -687,11 +652,12 @@ function somedayCard(item, onDone) {
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
       el('button', { class: 'btn btn-small', onclick: async () => {
-        // If this idea is linked to a project, the resulting action follows
-        // the same "needs Activating from the project page" gating as any
-        // other project-linked action — same rule as modal.js's openItemForm.
-        await DB.put('items', { ...item, type: 'next-action', activated: !item.projectId });
-        toast(item.projectId ? 'Moved to the project — Activate it there to show on Next Actions' : 'Activated as a next action');
+        // If this idea is linked to a project, it follows the same
+        // auto-activation rule as any other project-linked action — same
+        // rule as modal.js's openItemForm (see projectHasActiveAction).
+        const activated = item.projectId ? !(await projectHasActiveAction(item.projectId)) : true;
+        await DB.put('items', { ...item, type: 'next-action', activated });
+        toast(activated ? 'Activated as a next action' : 'Moved to the project — Activate it there to show on Next Actions');
         onDone();
       } }, 'Activate'),
       el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'someday', onSaved: onDone }) }),
