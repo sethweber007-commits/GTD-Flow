@@ -317,6 +317,14 @@ body {
   padding: 5px 8px 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
 }
 .chip-remove { background: none; border: none; cursor: pointer; font-size: 15px; color: inherit; line-height: 1; }
+.context-jump-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.context-jump-btn {
+  display: inline-flex; align-items: center;
+  background: var(--primary-light); color: var(--primary-dark);
+  border: none; cursor: pointer; font-family: inherit;
+  padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+}
+.context-jump-btn:hover { background: var(--primary); color: #fff; }
 .inline-form { display: flex; gap: 8px; }
 .inline-form input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
 

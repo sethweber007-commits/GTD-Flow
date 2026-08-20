@@ -355,24 +355,51 @@ export async function renderNextActions() {
     return;
   }
 
-  function renderContextGroups(container, groupItems) {
+  // Groups by context, ordered alphabetically with "No context" always
+  // last — shared by the jump-nav buttons below and the section rendering,
+  // so they always agree on exactly which contexts currently have actions.
+  function groupByContext(groupItems) {
     const byContext = new Map();
     groupItems.forEach((i) => {
       const key = i.context || 'No context';
       if (!byContext.has(key)) byContext.set(key, []);
       byContext.get(key).push(i);
     });
-    // Contexts are free-form now (typed per action, no fixed list) — order
-    // them alphabetically, with "No context" always last.
     const order = [...byContext.keys()].filter((c) => c !== 'No context').sort((a, b) => a.localeCompare(b));
     if (byContext.has('No context')) order.push('No context');
+    return { byContext, order };
+  }
+
+  function contextAnchorId(ctx) {
+    return 'ctx-' + ctx.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  }
+
+  const { byContext, order: contextOrder } = groupByContext(items);
+  if (contextOrder.length) {
+    r.appendChild(
+      el(
+        'div',
+        { class: 'context-jump-nav' },
+        contextOrder.map((ctx) =>
+          el('button', {
+            type: 'button',
+            class: 'context-jump-btn',
+            onclick: () => document.getElementById(contextAnchorId(ctx))?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+          }, `${ctx} (${byContext.get(ctx).length})`)
+        )
+      )
+    );
+  }
+
+  function renderContextGroups(container, groupItems) {
+    const { byContext, order } = groupByContext(groupItems);
     order.forEach((ctx) => {
       const group = byContext.get(ctx);
       if (!group || !group.length) return;
       // Important actions float to the top of their context group so
       // they're easy to spot at a glance, without leaving their context.
       group.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
-      container.appendChild(el('div', { class: 'context-subheading' }, `${ctx} (${group.length})`));
+      container.appendChild(el('div', { class: 'context-subheading', id: contextAnchorId(ctx) }, `${ctx} (${group.length})`));
       const list = el('div', { class: 'list' });
       group.forEach((item) => {
         const proj = projects.find((p) => p.id === item.projectId);
