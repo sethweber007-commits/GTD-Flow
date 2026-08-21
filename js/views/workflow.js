@@ -25,9 +25,10 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onActivate, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onScheduled, onActivate, meta, projectLabel } = {}) {
   const needsActivation = item.activated === false;
-  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
+  const unscheduled = onScheduled && !item.scheduled;
+  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') + (unscheduled ? ' unscheduled' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
       : null,
@@ -41,6 +42,12 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
+      onScheduled
+        ? el('label', { class: 'scheduled-toggle', title: 'Has this action been put on the calendar?' }, [
+            el('input', { type: 'checkbox', checked: item.scheduled || false, onchange: () => onScheduled(item) }),
+            ' Scheduled?',
+          ])
+        : null,
       onActivate && needsActivation
         ? el('button', {
             class: 'icon-btn activate-btn',
@@ -79,6 +86,13 @@ async function sendItemToSomeday(item, onDone) {
 // so they're easy to spot at a glance.
 async function toggleImportant(item, onDone) {
   await DB.put('items', { ...item, important: !item.important });
+  onDone();
+}
+
+// Toggles the "Scheduled?" flag on a Next Action. Actions that haven't
+// been put on the calendar yet stay highlighted so they don't get lost.
+async function toggleScheduled(item, onDone) {
+  await DB.put('items', { ...item, scheduled: !item.scheduled });
   onDone();
 }
 
@@ -411,6 +425,7 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
+            onScheduled: (it) => toggleScheduled(it, () => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
             onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
