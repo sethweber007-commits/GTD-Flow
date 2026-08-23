@@ -18,7 +18,18 @@ function root() {
   return document.getElementById('view-root');
 }
 
+// The router has no view-unmount hook, and Drive.onStatus/GCal.onStatus
+// subscriptions live for as long as the tab does — so without unsubscribing
+// the previous render's listeners here, every visit to Settings would pile
+// on another pair of listeners still holding onto that render's (by then
+// detached) DOM nodes, forever, for the life of the session.
+let unsubDrive = null;
+let unsubGCal = null;
+
 export async function renderSettings() {
+  if (unsubDrive) { unsubDrive(); unsubDrive = null; }
+  if (unsubGCal) { unsubGCal(); unsubGCal = null; }
+
   const r = root();
   r.innerHTML = '';
   r.appendChild(el('div', { class: 'page-header' }, [el('h1', {}, 'Settings')]));
@@ -63,7 +74,7 @@ export async function renderSettings() {
     }
   }
 
-  Drive.onStatus(paintDriveUI);
+  unsubDrive = Drive.onStatus(paintDriveUI);
 
   // --- Google Calendar sync ---
   const gcalCard = el('div', { class: 'card' }, [cardTitle('calendar', 'Google Calendar sync')]);
@@ -94,7 +105,7 @@ export async function renderSettings() {
     }
   }
 
-  GCal.onStatus(paintGCalUI);
+  unsubGCal = GCal.onStatus(paintGCalUI);
 
   // Settings is "the backup section" — the one place a silent Google
   // reconnect (which can still flash a native browser account UI) is

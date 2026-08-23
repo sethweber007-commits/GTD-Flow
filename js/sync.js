@@ -90,8 +90,23 @@ export const Sync = {
       DB.exportAll(),
     ]);
     const merged = mergeSnapshots(local, remote);
-    await DB.applyMerged(merged);
-    const body = JSON.stringify({ version: local.version, exportedAt: new Date().toISOString(), stores: merged }, null, 2);
+    // The Drive round-trip above can take a noticeable moment, during which
+    // the user can keep editing locally. applyMerged() below clears and
+    // repopulates every data store from `merged`, so any edit made after
+    // `local` was captured but before that write happens would otherwise be
+    // silently lost — it exists in neither `local` nor `remote`. Re-snapshot
+    // local data right before applying, and fold it into the merge as a
+    // third source: mergeSnapshots is last-write-wins on updatedAt (with
+    // tombstones for deletes), so this can only ever preserve a newer edit,
+    // never discard one. This can't close the window entirely (a fresh edit
+    // could still land in the brief gap before applyMerged's own transaction
+    // opens), but it shrinks it from "a full Drive network round-trip" down
+    // to "one more local IndexedDB round-trip" — worth doing since it's
+    // essentially free.
+    const latestLocal = await DB.exportAll();
+    const finalMerged = mergeSnapshots({ version: latestLocal.version, stores: merged }, latestLocal);
+    await DB.applyMerged(finalMerged);
+    const body = JSON.stringify({ version: local.version, exportedAt: new Date().toISOString(), stores: finalMerged }, null, 2);
     await Drive._uploadSnapshot(token, folderId, body);
     await DB.setMeta('lastSyncAt', new Date().toISOString());
   },

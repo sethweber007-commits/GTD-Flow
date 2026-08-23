@@ -121,7 +121,14 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
   const contextSuggestions = ['next-action', 'waiting-for', 'task'].includes(type) ? await distinctContexts() : [];
   const isEdit = !!item;
   const data = item || { type, title: '', notes: '', ...defaults };
-  const calendarFields = type === 'calendar' || type === 'task' ? buildCalendarDateFields(data) : null;
+  // A 'calendar' item (Event/Tickler) must always have a date — it has no
+  // other home in the app and, once synced, a corresponding Google Calendar
+  // event that only ever gets cleaned up when the item itself is deleted
+  // (see gcal.js's isSyncableCalendarItem/_handleRemoved). Clearing the date
+  // instead of deleting the item would silently orphan both. A 'task' (a
+  // Next Action placed on the calendar) has a real home either way — Next
+  // Actions — so clearing its date is a legitimate way to unschedule it.
+  const calendarFields = type === 'calendar' || type === 'task' ? buildCalendarDateFields(data, type === 'calendar') : null;
 
   const form = el('form', { class: 'form' }, [
     el('h3', {}, isEdit ? 'Edit item' : `New ${labelFor(type)}`),
@@ -167,6 +174,14 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     const record = { ...data, type: type === 'task' ? 'next-action' : type };
     record.title = fd.get('title')?.trim();
     if (!record.title) return;
+    // Belt-and-suspenders alongside the date field's `required` attribute
+    // (see buildCalendarDateFields) — a 'calendar' item with no date has no
+    // home anywhere in the app and would leave any already-synced Google
+    // Calendar event orphaned forever, so never let this save silently.
+    if (record.type === 'calendar' && !fd.get('calendarDateOnly')) {
+      toast('Pick a date for this event or tickler', 'error');
+      return;
+    }
     record.notes = fd.get('notes')?.trim() || '';
     if (fd.has('context')) record.context = fd.get('context') || null;
     if (fd.has('projectId')) {
@@ -453,12 +468,13 @@ function sectionFieldEl(sections, selectedId) {
 // a live "which weekday is this?" hint next to it (updates as you type or
 // pick), and time is intentionally never required — leaving it blank makes
 // the item all-day (see the calendarAllDay flag written on submit).
-function buildCalendarDateFields(data) {
+function buildCalendarDateFields(data, required = false) {
   const existing = data.calendarDate ? new Date(data.calendarDate) : null;
   const dateInput = el('input', {
     type: 'date',
     name: 'calendarDateOnly',
     value: existing ? toLocalDateInput(existing) : '',
+    required,
   });
   const timeInput = el('input', {
     type: 'time',
