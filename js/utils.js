@@ -40,20 +40,6 @@ export function formatDateTime(iso) {
   return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// Used for Calendar & Tickler items specifically: always shows the weekday
-// (e.g. "Tue, Jul 22, 2026"), and only shows a time when the item actually
-// has one — an all-day item (time left blank when scheduling) reads as a
-// plain date instead of a misleading "12:00 AM".
-export function formatCalendarDateTime(iso, allDay = false) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const opts = allDay
-    ? { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }
-    : { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
-  return d.toLocaleString(undefined, opts);
-}
-
 export function isPast(iso) {
   if (!iso) return false;
   return new Date(iso).getTime() < Date.now();

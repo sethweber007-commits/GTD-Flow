@@ -2,7 +2,6 @@ import { DB } from './db.js';
 import { seedIfEmpty } from './seed.js';
 import { Drive } from './drive.js';
 import { Sync } from './sync.js';
-import { GCal } from './gcal.js';
 import { route, notFound, startRouter, navigate } from './router.js';
 import { CONFIG } from './config.js';
 import {
@@ -13,7 +12,7 @@ import {
   renderProjectDetail,
   renderWaitingFor,
   renderSomeday,
-  renderCalendar,
+  renderSchedule,
   renderReference,
   renderReview,
 } from './views/workflow.js';
@@ -34,7 +33,9 @@ async function main() {
   route('/projects/:id', ({ id }) => renderProjectDetail(id));
   route('/waiting-for', renderWaitingFor);
   route('/someday', renderSomeday);
-  route('/calendar', renderCalendar);
+  route('/schedule', renderSchedule);
+  // Old deep link from the previous Calendar page.
+  route('/calendar', () => navigate('/schedule'));
   route('/reference', renderReference);
   route('/review', renderReview);
   route('/horizons', renderHorizons);
@@ -53,18 +54,16 @@ async function main() {
   // localStorage from an earlier explicit sign-in — it never requests a
   // new one from Google, so nothing here can show a sign-in prompt of any
   // kind. If there's no valid cached token, the actual (silent) reconnect
-  // attempt is deferred to Drive.reconnectIfNeeded() / GCal.reconnectIfNeeded(),
-  // called only when the user opens Settings (backup) or Calendar &
-  // Tickler — see views/settings.js and views/workflow.js. That's what
-  // keeps a Google sign-in prompt from ever appearing just because the app
-  // was opened to some other section. Deliberately NOT awaited here —
-  // Google's identity script can be slow or fail to load entirely (offline,
-  // blocked, etc.), and that must never delay the rest of app startup,
-  // especially registering the service worker that makes the app work
-  // offline in the first place.
+  // attempt is deferred to Drive.reconnectIfNeeded(), called only when the
+  // user opens Settings — see views/settings.js. That's what keeps a Google
+  // sign-in prompt from ever appearing just because the app was opened to
+  // some other section. Deliberately NOT awaited here — Google's identity
+  // script can be slow or fail to load entirely (offline, blocked, etc.),
+  // and that must never delay the rest of app startup, especially
+  // registering the service worker that makes the app work offline in the
+  // first place.
   Sync.init();
   Drive.init().catch((e) => console.warn('Drive init:', e.message));
-  GCal.init().catch((e) => console.warn('Calendar sync init:', e.message));
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch((e) => console.warn('SW registration failed', e));

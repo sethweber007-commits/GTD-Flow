@@ -31,20 +31,6 @@ export const CONFIG = {
   // each other even during a long idle stretch with no local edits.
   AUTO_SYNC_INTERVAL_MS: 5 * 60 * 1000,
 
-  // The Calendar API scope requested for Calendar & Tickler sync. This is a
-  // "sensitive" scope (it can create/edit/delete events), unlike drive.file
-  // — it works the same way in Google Cloud Console though: enable the
-  // Calendar API, add this scope on the same OAuth consent screen, and the
-  // same GOOGLE_CLIENT_ID above is reused. See SETUP.md.
-  GOOGLE_CALENDAR_SCOPE: 'https://www.googleapis.com/auth/calendar.events',
-
-  // Which calendar to sync into. 'primary' is the user's main calendar.
-  GOOGLE_CALENDAR_ID: 'primary',
-
-  // How long (in minutes) a synced Calendar & Tickler item's event block is,
-  // since GTD items are a single point in time rather than a start/end range.
-  GCAL_EVENT_DURATION_MINUTES: 30,
-
   // App name shown in the UI.
   APP_NAME: 'GTD Flow',
 };

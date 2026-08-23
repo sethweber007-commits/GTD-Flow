@@ -2,7 +2,6 @@ import { DB } from '../db.js';
 import { el, toast, formatDateTime } from '../utils.js';
 import { Drive } from '../drive.js';
 import { Sync } from '../sync.js';
-import { GCal } from '../gcal.js';
 import { confirmModal } from '../modal.js';
 import { CONFIG } from '../config.js';
 import { iconSvg } from '../icons.js';
@@ -18,17 +17,15 @@ function root() {
   return document.getElementById('view-root');
 }
 
-// The router has no view-unmount hook, and Drive.onStatus/GCal.onStatus
-// subscriptions live for as long as the tab does — so without unsubscribing
-// the previous render's listeners here, every visit to Settings would pile
-// on another pair of listeners still holding onto that render's (by then
-// detached) DOM nodes, forever, for the life of the session.
+// The router has no view-unmount hook, and Drive.onStatus subscriptions
+// live for as long as the tab does — so without unsubscribing the previous
+// render's listener here, every visit to Settings would pile on another
+// listener still holding onto that render's (by then detached) DOM nodes,
+// forever, for the life of the session.
 let unsubDrive = null;
-let unsubGCal = null;
 
 export async function renderSettings() {
   if (unsubDrive) { unsubDrive(); unsubDrive = null; }
-  if (unsubGCal) { unsubGCal(); unsubGCal = null; }
 
   const r = root();
   r.innerHTML = '';
@@ -76,47 +73,12 @@ export async function renderSettings() {
 
   unsubDrive = Drive.onStatus(paintDriveUI);
 
-  // --- Google Calendar sync ---
-  const gcalCard = el('div', { class: 'card' }, [cardTitle('calendar', 'Google Calendar sync')]);
-  const gcalStatusRow = el('p', { class: 'item-notes' });
-  const gcalBtnRow = el('div', { class: 'form-actions form-actions-left' });
-  gcalCard.appendChild(gcalStatusRow);
-  gcalCard.appendChild(el('p', { class: 'hint' }, 'One-way: Scheduled events and Ticklers you create in Calendar & Tickler are pushed to your Google Calendar. Nothing is ever pulled back into this app.'));
-  gcalCard.appendChild(gcalBtnRow);
-  r.appendChild(gcalCard);
-
-  function paintGCalUI(status) {
-    gcalStatusRow.textContent = status.message + (status.lastSyncAt ? ` · Last synced ${formatDateTime(status.lastSyncAt)}` : '');
-    gcalBtnRow.innerHTML = '';
-    if (!GCal.isConfigured()) {
-      gcalBtnRow.appendChild(el('p', { class: 'hint' }, 'Add your Google OAuth Client ID in js/config.js to enable this — see SETUP.md.'));
-      return;
-    }
-    if (status.state === 'signed-in' || status.state === 'syncing' || status.state === 'error') {
-      gcalBtnRow.appendChild(el('button', { class: 'btn btn-primary', onclick: () => GCal.syncAll().then(() => toast('Synced')).catch(() => toast('Sync failed', 'error')) }, 'Sync now'));
-      gcalBtnRow.appendChild(el('button', { class: 'btn btn-ghost', onclick: () => GCal.signOut().then(() => toast('Disconnected')) }, 'Disconnect'));
-    } else {
-      gcalBtnRow.appendChild(
-        el('button', { class: 'btn btn-primary', onclick: async () => {
-          try { await GCal.signIn(); toast('Connected to Google Calendar'); }
-          catch (e) { toast(e.message, 'error'); }
-        } }, 'Connect Google Calendar')
-      );
-    }
-  }
-
-  unsubGCal = GCal.onStatus(paintGCalUI);
-
   // Settings is "the backup section" — the one place a silent Google
   // reconnect (which can still flash a native browser account UI) is
   // allowed to happen without the user having clicked Connect this
-  // session. See Drive.reconnectIfNeeded / GCal.reconnectIfNeeded for why
-  // this isn't done on app startup. Sequenced rather than concurrent to
-  // avoid two simultaneous hidden-iframe/FedCM requests interfering with
-  // each other.
-  Drive.reconnectIfNeeded()
-    .catch((e) => console.warn('Drive reconnect:', e.message))
-    .then(() => GCal.reconnectIfNeeded().catch((e) => console.warn('Calendar reconnect:', e.message)));
+  // session. See Drive.reconnectIfNeeded for why this isn't done on app
+  // startup.
+  Drive.reconnectIfNeeded().catch((e) => console.warn('Drive reconnect:', e.message));
 
   // --- Local backup (belt & suspenders alongside Drive) ---
   const localCard = el('div', { class: 'card' }, [

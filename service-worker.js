@@ -1,6 +1,6 @@
 // Service worker for offline support. Bump CACHE_VERSION whenever any
 // precached file changes so clients pick up the update.
-const CACHE_VERSION = 'gtd-flow-v8';
+const CACHE_VERSION = 'gtd-flow-v9';
 const PRECACHE = [
   './',
   './index.html',
@@ -10,7 +10,6 @@ const PRECACHE = [
   './js/db.js',
   './js/drive.js',
   './js/sync.js',
-  './js/gcal.js',
   './js/config.js',
   './js/seed.js',
   './js/router.js',

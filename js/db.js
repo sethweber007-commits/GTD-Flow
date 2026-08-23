@@ -148,9 +148,8 @@ export const DB = {
     const transaction = db.transaction([store, 'tombstones'], 'readwrite');
     const s = transaction.objectStore(store);
     const tombstones = transaction.objectStore('tombstones');
-    // Fetch the record before deleting it so listeners (e.g. Google Calendar
-    // sync, which needs the removed item's googleEventId) get the full
-    // record, not just its id.
+    // Fetch the record before deleting it so listeners get the full record,
+    // not just its id.
     const existing = await new Promise((resolve) => {
       const getReq = s.get(id);
       getReq.onsuccess = () => resolve(getReq.result || null);

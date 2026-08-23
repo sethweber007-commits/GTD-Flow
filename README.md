@@ -45,14 +45,14 @@ a folder in your own Google Drive.
   date, one-click "Activate" into a real next action, custom **sections**
   for grouping ideas, and a "Export .md" button to save the whole list as a
   Markdown file.
-- **Calendar & Tickler** — for anything with a specific date and time, you
-  choose its **Kind**: a **Scheduled event** (a hard commitment, listed
-  under Scheduled) or a **Tickler** (a reminder to revisit, listed under
-  Tickler alongside Someday/Maybe items whose revisit date has arrived).
-  Both kinds are fully actionable — check off, edit, or delete either one
-  directly. This choice is available anywhere a dated item is created or
-  edited: Clarify's "dated" step, the Calendar page's "Add dated item"
-  button, and when editing an existing item. Also exportable to Markdown.
+- **To-Do Schedule** — a plain checklist of things you intend to put on your
+  own Google Calendar. Add an item (from Clarify's "Schedule" step, the
+  To-Do Schedule page itself, or the "Schedule" button on any Next Action),
+  then add it to Google Calendar yourself and check it off here as your
+  record that it's done. There's no Google Calendar API connection and
+  nothing is ever pushed anywhere automatically — this is purely a manual
+  checklist. Also shows Someday/Maybe items whose tickler date has arrived,
+  and exports to Markdown.
 - **Reference** — a searchable, categorized filing system for
   non-actionable material you want to keep (see *References*, below).
   Marking an inbox item as Reference during Clarify immediately opens the
@@ -132,7 +132,6 @@ gtd-pwa/
 │   ├── db.js                IndexedDB data layer
 │   ├── drive.js              Google Drive backup
 │   ├── sync.js                Two-way Drive sync (merge + auto-sync triggers)
-│   ├── gcal.js                  One-way Google Calendar sync
 │   ├── config.js              ← put your Google Client ID here
 │   ├── seed.js                 First-run data
 │   ├── modal.js                 Reusable modal + item/project/section forms
@@ -140,8 +139,8 @@ gtd-pwa/
 │   ├── icons.js                   Inline-SVG icon set
 │   └── views/
 │       ├── workflow.js            Inbox, Clarify, Next Actions, Projects,
-│       │                          Waiting For, Someday, Calendar, Reference,
-│       │                          Weekly Review
+│       │                          Waiting For, Someday, To-Do Schedule,
+│       │                          Reference, Weekly Review
 │       ├── horizons.js             Purpose/Vision/Goals/Areas, one accordion tab
 │       └── settings.js              Drive backup UI, contexts, data tools
 ├── SETUP.md                Hosting + Google Drive OAuth setup (read this first)

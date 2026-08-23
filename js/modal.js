@@ -109,32 +109,23 @@ function wireKeyboardAvoidance(hostEl) {
   };
 }
 
-// -- Item form (used by Inbox, Next Actions, Waiting For, Someday, Calendar, Reference) --
-// `type: 'task'` is a form-shape only, used by the Calendar page to edit a
-// Next Action that's been placed on a specific day — it renders like a next
-// action (context, project) plus the calendar date/time fields, but always
-// saves as a real 'next-action' record (see the submit handler below) so it
-// stays the same item shown on the Next Actions list.
+// -- Item form (used by Inbox, Next Actions, Waiting For, Someday, To-Do Schedule, Reference) --
+// `type: 'calendar'` is the To-Do Schedule page's item type (see
+// views/workflow.js's SCHEDULE section) — just a title, an optional project
+// link, and notes. Whether it's been scheduled is tracked separately (a
+// checkbox on the To-Do Schedule list itself), not through this form.
 export async function openItemForm({ item = null, type, defaults = {}, onSaved, focusSection = false }) {
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
   const sections = type === 'someday' ? await DB.getByIndex('sections', 'view', type) : [];
-  const contextSuggestions = ['next-action', 'waiting-for', 'task'].includes(type) ? await distinctContexts() : [];
+  const contextSuggestions = ['next-action', 'waiting-for'].includes(type) ? await distinctContexts() : [];
   const isEdit = !!item;
   const data = item || { type, title: '', notes: '', ...defaults };
-  // A 'calendar' item (Event/Tickler) must always have a date — it has no
-  // other home in the app and, once synced, a corresponding Google Calendar
-  // event that only ever gets cleaned up when the item itself is deleted
-  // (see gcal.js's isSyncableCalendarItem/_handleRemoved). Clearing the date
-  // instead of deleting the item would silently orphan both. A 'task' (a
-  // Next Action placed on the calendar) has a real home either way — Next
-  // Actions — so clearing its date is a legitimate way to unschedule it.
-  const calendarFields = type === 'calendar' || type === 'task' ? buildCalendarDateFields(data, type === 'calendar') : null;
 
   const form = el('form', { class: 'form' }, [
     el('h3', {}, isEdit ? 'Edit item' : `New ${labelFor(type)}`),
     field('Title', el('input', { type: 'text', name: 'title', required: true, value: data.title || '', placeholder: 'What is it?' })),
 
-    type === 'next-action' || type === 'waiting-for' || type === 'task'
+    type === 'next-action' || type === 'waiting-for'
       ? field('Context', contextFieldEl(contextSuggestions, data.context))
       : null,
 
@@ -142,16 +133,11 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
       ? field('Category (optional)', sectionFieldEl(sections, data.sectionId))
       : null,
 
-    ['next-action', 'waiting-for', 'someday', 'calendar', 'task'].includes(type)
+    ['next-action', 'waiting-for', 'someday', 'calendar'].includes(type)
       ? field('Project (optional)', projectPicker({ projects, selectedId: data.projectId }))
       : null,
 
     type === 'waiting-for' ? field('Waiting on', el('input', { type: 'text', name: 'waitingOn', value: data.waitingOn || '', placeholder: 'Who / what' })) : null,
-
-    type === 'calendar' ? field('Kind', kindSelectEl(data.calendarKind)) : null,
-
-    calendarFields ? calendarFields.dateField : null,
-    calendarFields ? calendarFields.timeField : null,
 
     type === 'someday' ? field('Revisit on (tickler, optional)', el('input', { type: 'date', name: 'tickleDate', value: (data.tickleDate || '').slice(0, 10) })) : null,
 
@@ -168,20 +154,9 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    // A 'task' is always stored as a real next-action — the pseudo-type only
-    // controls which fields this form shows (see the comment on
-    // openItemForm above).
-    const record = { ...data, type: type === 'task' ? 'next-action' : type };
+    const record = { ...data, type };
     record.title = fd.get('title')?.trim();
     if (!record.title) return;
-    // Belt-and-suspenders alongside the date field's `required` attribute
-    // (see buildCalendarDateFields) — a 'calendar' item with no date has no
-    // home anywhere in the app and would leave any already-synced Google
-    // Calendar event orphaned forever, so never let this save silently.
-    if (record.type === 'calendar' && !fd.get('calendarDateOnly')) {
-      toast('Pick a date for this event or tickler', 'error');
-      return;
-    }
     record.notes = fd.get('notes')?.trim() || '';
     if (fd.has('context')) record.context = fd.get('context') || null;
     if (fd.has('projectId')) {
@@ -204,21 +179,6 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
       }
     }
     if (fd.has('waitingOn')) record.waitingOn = fd.get('waitingOn') || '';
-    if (fd.has('calendarKind')) record.calendarKind = fd.get('calendarKind') === 'tickler' ? 'tickler' : 'event';
-    if (fd.has('calendarDateOnly')) {
-      const dateStr = fd.get('calendarDateOnly');
-      const timeStr = fd.get('calendarTime');
-      if (dateStr) {
-        // No time given -> all-day: store local midnight for that date, and
-        // flag it so displays/exports/Calendar-sync know not to show/send a
-        // (misleadingly specific) time for it.
-        record.calendarDate = new Date(`${dateStr}T${timeStr || '00:00'}:00`).toISOString();
-        record.calendarAllDay = !timeStr;
-      } else {
-        record.calendarDate = null;
-        record.calendarAllDay = false;
-      }
-    }
     if (fd.has('tickleDate')) record.tickleDate = fd.get('tickleDate') ? new Date(fd.get('tickleDate')).toISOString() : null;
     if (fd.has('category')) record.category = fd.get('category') || '';
 
@@ -464,68 +424,6 @@ function sectionFieldEl(sections, selectedId) {
   return wrap;
 }
 
-// Date + optional time fields for Calendar & Tickler items. The date shows
-// a live "which weekday is this?" hint next to it (updates as you type or
-// pick), and time is intentionally never required — leaving it blank makes
-// the item all-day (see the calendarAllDay flag written on submit).
-function buildCalendarDateFields(data, required = false) {
-  const existing = data.calendarDate ? new Date(data.calendarDate) : null;
-  const dateInput = el('input', {
-    type: 'date',
-    name: 'calendarDateOnly',
-    value: existing ? toLocalDateInput(existing) : '',
-    required,
-  });
-  const timeInput = el('input', {
-    type: 'time',
-    name: 'calendarTime',
-    value: existing && !data.calendarAllDay ? toLocalTimeInput(existing) : '',
-  });
-  const weekdayHint = el('span', { class: 'field-weekday-hint' }, existing ? weekdayLabel(existing) : '');
-
-  const updateWeekday = () => {
-    if (!dateInput.value) {
-      weekdayHint.textContent = '';
-      return;
-    }
-    // Parse the yyyy-mm-dd value as a local date (not UTC midnight), or the
-    // weekday can come out a day off depending on the browser's timezone.
-    const [y, m, d] = dateInput.value.split('-').map(Number);
-    weekdayHint.textContent = weekdayLabel(new Date(y, m - 1, d));
-  };
-  dateInput.addEventListener('input', updateWeekday);
-  dateInput.addEventListener('change', updateWeekday);
-
-  const dateField = field('Date', el('div', { class: 'calendar-date-row' }, [dateInput, weekdayHint]));
-  const timeField = field('Time (optional — leave blank for an all-day item)', timeInput);
-  return { dateField, timeField };
-}
-
-function weekdayLabel(d) {
-  return d.toLocaleDateString(undefined, { weekday: 'long' });
-}
-
-function toLocalDateInput(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function toLocalTimeInput(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function kindSelectEl(selected) {
-  const sel = el('select', { name: 'calendarKind' });
-  const evOpt = el('option', { value: 'event' }, 'Scheduled event — a hard commitment at that time');
-  const tkOpt = el('option', { value: 'tickler' }, 'Tickler — a reminder to revisit on that date');
-  if (selected === 'tickler') tkOpt.selected = true;
-  else evOpt.selected = true;
-  sel.appendChild(evOpt);
-  sel.appendChild(tkOpt);
-  return sel;
-}
-
 function selectEl(name, options, selected, dataObjs) {
   const sel = el('select', { name });
   sel.appendChild(el('option', { value: '' }, '—'));
@@ -544,8 +442,7 @@ function labelFor(type) {
       'next-action': 'next action',
       'waiting-for': 'waiting on',
       someday: 'someday/maybe',
-      calendar: 'calendar item',
-      task: 'scheduled task',
+      calendar: 'schedule item',
       reference: 'reference item',
       'project-note': 'project info item',
     }[type] || 'item'

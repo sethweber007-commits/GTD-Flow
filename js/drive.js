@@ -362,9 +362,6 @@ export function waitForGis() {
   });
 }
 
-// Shared by drive.js and gcal.js — each keeps its own independent token
-// client (separate scope/consent), but both should be set up the same way.
-//
 // use_fedcm_for_prompt opts into the FedCM-based flow for silent
 // (prompt: '') token requests. Without it, silent refresh depends on a
 // hidden iframe reading a third-party cookie on accounts.google.com, which
@@ -463,7 +460,7 @@ export function clearCachedToken(key) {
   }
 }
 
-// The proactive-refresh setTimeout in Drive/GCal is only reliable while the
+// The proactive-refresh setTimeout in Drive is only reliable while the
 // tab/app stays in the foreground — mobile browsers (and installed PWAs
 // especially) routinely freeze or heavily throttle timers for a backgrounded
 // page, so a token due to expire while the app is sitting unused in the
@@ -472,8 +469,7 @@ export function clearCachedToken(key) {
 // callback runs again immediately whenever the page becomes visible —
 // catching an about-to-expire (or already-expired) token right at the
 // moment the user actually reopens/resumes the app, which is exactly when
-// it matters. Registered once per callback; safe to call from both
-// drive.js and gcal.js.
+// it matters.
 const visibilityCallbacks = new Set();
 let visibilityWired = false;
 export function onAppVisible(fn) {

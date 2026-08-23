@@ -1,7 +1,7 @@
 {
   "name": "GTD Flow",
   "short_name": "GTD Flow",
-  "description": "A complete Getting Things Done (GTD) app with Inbox, Clarify, Next Actions, Projects, Waiting For, Someday/Maybe, Calendar/Tickler, Reference, Weekly Review, and Horizons of Focus — backed up automatically to your Google Drive.",
+  "description": "A complete Getting Things Done (GTD) app with Inbox, Clarify, Next Actions, Projects, Waiting For, Someday/Maybe, To-Do Schedule, Reference, Weekly Review, and Horizons of Focus — backed up automatically to your Google Drive.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

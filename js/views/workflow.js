@@ -1,9 +1,8 @@
 import { DB } from '../db.js';
-import { el, toast, formatDate, formatCalendarDateTime, isPast, isToday, downloadTextFile, mdEscape, projectPicker } from '../utils.js';
-import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection, projectHasActiveAction, openModal, closeModal } from '../modal.js';
+import { el, toast, formatDate, isPast, isToday, downloadTextFile, mdEscape, projectPicker } from '../utils.js';
+import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection, projectHasActiveAction } from '../modal.js';
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
-import { GCal } from '../gcal.js';
 import { iconSvg } from '../icons.js';
 
 function root() {
@@ -45,9 +44,9 @@ function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomed
         ? el('button', {
             type: 'button',
             class: 'btn btn-ghost btn-small',
-            title: item.calendarDate ? 'Reschedule on the calendar' : 'Schedule on the calendar',
+            title: item.wantsScheduling ? 'Remove from your To-Do Schedule' : 'Add to your To-Do Schedule',
             onclick: () => onSchedule(item),
-          }, iconLabel('calendar', item.calendarDate ? 'Reschedule' : 'Schedule', 14))
+          }, iconLabel('calendar', item.wantsScheduling ? 'On Schedule' : 'Schedule', 14))
         : null,
       onComplete && completeAsButton
         ? el('button', {
@@ -107,29 +106,20 @@ async function activateAction(item, onDone) {
   onDone();
 }
 
+// Toggles a Next Action's membership on the To-Do Schedule checklist (see
+// the SCHEDULE section below). Re-adding after a removal always starts
+// unchecked again, rather than reusing whatever "scheduled" state it had
+// last time.
+async function toggleWantsScheduling(item, onDone) {
+  const wants = !item.wantsScheduling;
+  await DB.put('items', { ...item, wantsScheduling: wants, scheduled: wants ? false : item.scheduled });
+  toast(wants ? 'Added to To-Do Schedule' : 'Removed from To-Do Schedule');
+  onDone();
+}
+
 async function refresh(renderFn) {
   await renderFn();
 }
-
-// ---------------------------------------------------- CALENDAR (shared) ---
-// Module-level so it survives across renderCalendar() re-renders (e.g.
-// after a drag-drop move or a completion toggle) and so the Next Actions
-// "Schedule" button — which lives in a completely different view — can set
-// it before navigating over.
-const calendarState = { view: 'month', cursor: new Date() };
-// Id of the Next Action to scroll to/flash the next time the Calendar page
-// renders — set by the Schedule button in renderNextActions, consumed once.
-let calendarFocusId = null;
-// Id of the item currently "armed" for tap-to-move placement (the
-// touch-friendly alternative to HTML5 drag-and-drop) — set by tapping a
-// pill's move handle or a tray item, consumed by tapping a day/slot.
-let calendarArmedId = null;
-// Day keys (yyyy-mm-dd) whose "+N more" has been expanded to show every
-// item for that day, in the month grid.
-const calendarExpandedDays = new Set();
-// Fallback for browsers/situations where reading back dataTransfer on drop
-// is unreliable — set on dragstart, cleared on dragend.
-let calendarDraggingId = null;
 
 // ---------------------------------------------------------------- INBOX ---
 export async function renderInbox() {
@@ -250,7 +240,7 @@ export async function renderClarify() {
         [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }],
         [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true)],
         [['star', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
-        [['calendar', 'Schedule/Tickler'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
+        [['calendar', 'Schedule'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
       ]));
     } else if (state.step === 'new-item-menu') {
       card.appendChild(question('What kind of new item?', [
@@ -447,11 +437,7 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             completeAsButton: true,
-            onSchedule: (it) => {
-              calendarFocusId = it.id;
-              if (it.calendarDate) calendarState.cursor = new Date(it.calendarDate);
-              navigate('/calendar');
-            },
+            onSchedule: (it) => toggleWantsScheduling(it, () => refresh(renderNextActions)),
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
@@ -882,418 +868,81 @@ export async function renderSomeday() {
   draw();
 }
 
-// -------------------------------------------------------------- CALENDAR --
-// A Google-Calendar-style month/week grid. Three kinds of dated item can
-// live on it: 'event' and 'tickler' (both stored as type:'calendar', same
-// as before) and 'task' — a real Next Action (type:'next-action') that has
-// calendarDate/calendarAllDay set. Because a scheduled task is literally
-// the same record shown on the Next Actions list, completing it here (or
-// there) is just one DB.put — no separate sync step needed.
-const DEFAULT_BLOCK_MINUTES = 30;
-const HOUR_HEIGHT = 44;
+// -------------------------------------------------------- TO-DO SCHEDULE --
+// A flat checklist of things you intend to put on your own Google Calendar.
+// This app never talks to the Google Calendar API — there's no OAuth
+// connection and nothing is pushed anywhere automatically. You add the
+// event to Google Calendar yourself, then check it off here as your record
+// that it's been scheduled. Two kinds of item can appear: standalone
+// type:'calendar' items (created here, or from Clarify's "Schedule" step)
+// and Next Actions flagged via the "Schedule" button on the Next Actions
+// list (wantsScheduling: true) — because a flagged action is literally the
+// same record shown there, checking it off here is just one DB.put, same as
+// everywhere else in the app.
 
-function kindOf(item) {
-  return item.type === 'next-action' ? 'task' : item.calendarKind === 'tickler' ? 'tickler' : 'event';
-}
-
-function dateKey(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function addDays(d, n) {
-  const copy = new Date(d);
-  copy.setDate(copy.getDate() + n);
-  return copy;
-}
-
-function isSameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function startOfWeek(d) {
-  return addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -d.getDay());
-}
-
-function formatPillTime(iso) {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatHourLabel(h) {
-  return new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
-}
-
-function weekRangeLabel(cursor) {
-  const start = startOfWeek(cursor);
-  const end = addDays(start, 6);
-  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
-  const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  // A day+year-only Intl format (no month) renders oddly in some engines
-  // (e.g. "2026 (day: 29)") — build the same-month case by hand instead.
-  const endLabel = sameMonth
-    ? `${end.getDate()}, ${end.getFullYear()}`
-    : end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  return `${startLabel} – ${endLabel}`;
-}
-
-// Greedy overlap layout for the week view's timed grid: events that overlap
-// in time share the column width side-by-side; non-overlapping ones each
-// get the full width. Good enough for a personal calendar's typical
-// density — not a full Google-Calendar packing algorithm.
-function layoutOverlaps(items) {
-  const ranges = items
-    .map((item) => {
-      const start = new Date(item.calendarDate);
-      const startMin = start.getHours() * 60 + start.getMinutes();
-      return { item, startMin, endMin: startMin + DEFAULT_BLOCK_MINUTES, durMin: DEFAULT_BLOCK_MINUTES };
-    })
-    .sort((a, b) => a.startMin - b.startMin);
-  const clusters = [];
-  let current = [];
-  let clusterEnd = -Infinity;
-  ranges.forEach((r) => {
-    if (current.length && r.startMin >= clusterEnd) {
-      clusters.push(current);
-      current = [];
-      clusterEnd = -Infinity;
-    }
-    current.push(r);
-    clusterEnd = Math.max(clusterEnd, r.endMin);
-  });
-  if (current.length) clusters.push(current);
-  const result = [];
-  clusters.forEach((cluster) => {
-    cluster.forEach((r, idx) => result.push({ item: r.item, startMin: r.startMin, durMin: r.durMin, col: idx, cols: cluster.length }));
-  });
-  return result;
-}
-
-function calendarToMarkdown(dated, somedayTickled) {
-  const events = dated.filter((i) => i.type === 'calendar' && i.calendarKind !== 'tickler').sort((a, b) => new Date(a.calendarDate) - new Date(b.calendarDate));
-  const tasks = dated.filter((i) => i.type === 'next-action').sort((a, b) => new Date(a.calendarDate) - new Date(b.calendarDate));
-  const ticklers = dated.filter((i) => i.type === 'calendar' && i.calendarKind === 'tickler').sort((a, b) => new Date(a.calendarDate) - new Date(b.calendarDate));
-  let md = `# Calendar\n\n_Exported ${new Date().toLocaleString()}_\n\n## Events\n\n`;
-  md += events.length
-    ? events.map((item) => `- **${item.title}** — ${formatCalendarDateTime(item.calendarDate, item.calendarAllDay)}${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`).join('\n')
-    : '_Nothing scheduled._';
-  md += `\n\n## Tasks\n\n`;
-  md += tasks.length
-    ? tasks.map((item) => `- **${item.title}**${item.completed ? ' (done)' : ''} — ${formatCalendarDateTime(item.calendarDate, item.calendarAllDay)}${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`).join('\n')
-    : '_Nothing scheduled._';
-  md += `\n\n## Tickler\n\n`;
-  const ticklerLines = [
-    ...ticklers.map((item) => `- **${item.title}** — revisit ${formatCalendarDateTime(item.calendarDate, item.calendarAllDay)}${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`),
-    ...somedayTickled.map((item) => `- **${item.title}** — revisit ${formatDate(item.tickleDate)}${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`),
-  ];
+function scheduleToMarkdown(items, somedayTickled) {
+  const pending = items.filter((i) => !i.scheduled);
+  const scheduled = items.filter((i) => i.scheduled);
+  let md = `# To-Do Schedule\n\n_Exported ${new Date().toLocaleString()}_\n\n## To schedule\n\n`;
+  md += pending.length
+    ? pending.map((item) => `- **${item.title}**${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`).join('\n')
+    : '_Nothing waiting to be scheduled._';
+  md += `\n\n## Scheduled\n\n`;
+  md += scheduled.length
+    ? scheduled.map((item) => `- **${item.title}**${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`).join('\n')
+    : '_Nothing scheduled yet._';
+  md += `\n\n## Someday/Maybe Tickler Reviews\n\n`;
+  const ticklerLines = somedayTickled.map((item) => `- **${item.title}** — revisit ${formatDate(item.tickleDate)}${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`);
   md += ticklerLines.length ? ticklerLines.join('\n') : '_Nothing tickled._';
   return md + '\n';
 }
 
-function wireDragSource(node, item) {
-  node.setAttribute('draggable', 'true');
-  node.addEventListener('dragstart', (e) => {
-    calendarDraggingId = item.id;
-    e.dataTransfer.setData('text/plain', item.id);
-    e.dataTransfer.effectAllowed = 'move';
-  });
-  node.addEventListener('dragend', () => { calendarDraggingId = null; });
-}
-
-// hour === null means "date only" (month-grid cell, or the week view's
-// all-day row) — otherwise it's an hour slot in the week view's timed grid.
-function wireDropTarget(node, key, hour) {
-  node.addEventListener('dragover', (e) => { e.preventDefault(); node.classList.add('cal-drop-target'); });
-  node.addEventListener('dragleave', () => node.classList.remove('cal-drop-target'));
-  node.addEventListener('drop', (e) => {
-    e.preventDefault();
-    node.classList.remove('cal-drop-target');
-    const id = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || calendarDraggingId;
-    if (id) moveItemToSlot(id, key, hour);
-  });
-}
-
-async function moveItemToSlot(id, key, hour) {
-  const item = await DB.get('items', id);
-  if (!item) return;
-  const [y, m, d] = key.split('-').map(Number);
-  let newDate;
-  let allDay;
-  if (hour == null) {
-    if (item.calendarDate && !item.calendarAllDay) {
-      // Dropped on a date-only target but the item already has a specific
-      // time (e.g. dragging a timed event to a different day in month
-      // view) — keep the time, just move the date.
-      const old = new Date(item.calendarDate);
-      newDate = new Date(y, m - 1, d, old.getHours(), old.getMinutes());
-      allDay = false;
-    } else {
-      newDate = new Date(y, m - 1, d, 0, 0);
-      allDay = true;
-    }
-  } else {
-    newDate = new Date(y, m - 1, d, hour, 0);
-    allDay = false;
-  }
-  await DB.put('items', { ...item, calendarDate: newDate.toISOString(), calendarAllDay: allDay });
-  toast(`Moved "${item.title}"`);
-  refresh(renderCalendar);
-}
-
-function toggleArmed(item) {
-  calendarArmedId = calendarArmedId === item.id ? null : item.id;
-  refresh(renderCalendar);
-}
-
-// Touch-friendly alternative to HTML5 drag-and-drop: tap a pill/tray item's
-// move handle to "arm" it, then tap a day (or, in week view, an hour slot)
-// to place it there. If nothing is armed, tapping empty calendar space
-// opens the add-item chooser for that date/time instead.
-function onCellClick(key, hour) {
-  if (calendarArmedId) {
-    const id = calendarArmedId;
-    calendarArmedId = null;
-    moveItemToSlot(id, key, hour);
-  } else {
-    openAddChooser({ dateKey: key, hour });
-  }
-}
-
-function openCalendarItemEditor(item) {
-  const formType = item.type === 'next-action' ? 'task' : 'calendar';
-  openItemForm({ item, type: formType, onSaved: () => refresh(renderCalendar) });
-}
-
-function renderCalPill(item) {
-  const kind = kindOf(item);
-  const armed = calendarArmedId === item.id;
-  const timeLabel = !item.calendarAllDay && item.calendarDate ? formatPillTime(item.calendarDate) : '';
-  const pill = el('div', {
-    class: `cal-pill cal-pill-${kind}` + (item.completed ? ' cal-pill-completed' : '') + (armed ? ' cal-armed' : ''),
-    'data-item-id': item.id,
-    title: item.title + (item.notes ? '\n' + item.notes : ''),
-  }, [
+function scheduleRow(item, projects) {
+  const isAction = item.type === 'next-action';
+  const proj = isAction ? projects.find((p) => p.id === item.projectId) : null;
+  return el('div', { class: 'item-row' + (item.scheduled ? ' completed' : '') }, [
     el('input', {
       type: 'checkbox',
-      class: 'cal-pill-check',
-      checked: item.completed || false,
-      onclick: (e) => e.stopPropagation(),
+      checked: item.scheduled || false,
+      title: item.scheduled ? 'Mark as not yet scheduled' : "Check off once you've added this to Google Calendar",
       onchange: async () => {
-        await DB.put('items', { ...item, completed: !item.completed, completedAt: !item.completed ? new Date().toISOString() : null });
-        refresh(renderCalendar);
+        await DB.put('items', { ...item, scheduled: !item.scheduled, scheduledAt: !item.scheduled ? new Date().toISOString() : null });
+        refresh(renderSchedule);
       },
     }),
-    el('button', {
-      type: 'button',
-      class: 'cal-pill-handle',
-      title: 'Move — tap, then tap a day',
-      html: iconSvg('dragHandle', 12),
-      onclick: (e) => { e.stopPropagation(); toggleArmed(item); },
-    }),
-    timeLabel ? el('span', { class: 'cal-pill-time' }, timeLabel) : null,
-    el('span', { class: 'cal-pill-title' }, item.title),
-  ].filter(Boolean));
-  pill.addEventListener('click', (e) => {
-    if (e.target.closest('.cal-pill-check') || e.target.closest('.cal-pill-handle')) return;
-    openCalendarItemEditor(item);
-  });
-  wireDragSource(pill, item);
-  return pill;
-}
-
-function calendarChoiceBtn(icon, title, desc, onclick) {
-  return el('button', { type: 'button', class: 'btn btn-choice', onclick }, [
-    el('span', {}, iconLabel(icon, title, 16)),
-    el('div', { class: 'hint' }, desc),
-  ]);
-}
-
-function dateDefaults(dateKeyStr, hour) {
-  if (!dateKeyStr) return {};
-  const [y, m, d] = dateKeyStr.split('-').map(Number);
-  if (hour == null) return { calendarDate: new Date(y, m - 1, d, 0, 0).toISOString(), calendarAllDay: true };
-  return { calendarDate: new Date(y, m - 1, d, hour, 0).toISOString(), calendarAllDay: false };
-}
-
-function openAddChooser({ dateKey: dk, hour } = {}) {
-  const defaults = dateDefaults(dk, hour);
-  const body = el('div', { class: 'form' }, [
-    el('h3', {}, 'Add to calendar'),
-    el('p', {}, 'What kind of item is this?'),
-    el('div', { class: 'clarify-options' }, [
-      calendarChoiceBtn('calendar', 'Event', 'A hard commitment at a specific time — syncs to Google Calendar if connected.', () => {
-        closeModal();
-        openItemForm({ type: 'calendar', defaults: { calendarKind: 'event', ...defaults }, onSaved: () => refresh(renderCalendar) });
+    el('div', { class: 'item-main' }, [
+      proj ? el('div', { class: 'item-project-label' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + proj.title]) : null,
+      el('div', { class: 'item-title' }, item.title),
+      item.notes ? el('div', { class: 'item-notes' }, item.notes) : null,
+    ].filter(Boolean)),
+    el('div', { class: 'item-actions' }, [
+      isAction
+        ? el('button', { class: 'icon-btn', title: 'Open in Next Actions', html: iconSvg('checkCircle', 16), onclick: () => navigate('/next-actions') })
+        : el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'calendar', onSaved: () => refresh(renderSchedule) }) }),
+      el('button', {
+        class: 'icon-btn',
+        title: isAction ? 'Remove from To-Do Schedule' : 'Delete',
+        html: iconSvg(isAction ? 'x' : 'trash', 16),
+        onclick: async () => {
+          if (isAction) {
+            await DB.put('items', { ...item, wantsScheduling: false, scheduled: false });
+            refresh(renderSchedule);
+          } else if (await confirmModal(`Delete "${item.title}"?`)) {
+            await DB.remove('items', item.id);
+            refresh(renderSchedule);
+          }
+        },
       }),
-      calendarChoiceBtn('checkCircle', 'Task', 'A next action placed on this day — stays in sync with your Next Actions list.', () => {
-        closeModal();
-        openItemForm({ type: 'task', defaults, onSaved: () => refresh(renderCalendar) });
-      }),
-      calendarChoiceBtn('clock', 'Tickler', 'A reminder to revisit this date — syncs to Google Calendar if connected.', () => {
-        closeModal();
-        openItemForm({ type: 'calendar', defaults: { calendarKind: 'tickler', ...defaults }, onSaved: () => refresh(renderCalendar) });
-      }),
-    ]),
-    el('div', { class: 'form-actions' }, [el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel')]),
-  ]);
-  openModal(body);
-}
-
-function calendarToolbar() {
-  const label = calendarState.view === 'month'
-    ? calendarState.cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    : weekRangeLabel(calendarState.cursor);
-  return el('div', { class: 'cal-toolbar' }, [
-    el('div', { class: 'cal-toolbar-nav' }, [
-      el('button', { type: 'button', class: 'btn btn-ghost btn-small', title: 'Previous', html: iconSvg('chevronLeft', 16), onclick: () => { stepCursor(-1); refresh(renderCalendar); } }),
-      el('button', { type: 'button', class: 'btn btn-ghost btn-small', onclick: () => { calendarState.cursor = new Date(); refresh(renderCalendar); } }, 'Today'),
-      el('button', { type: 'button', class: 'btn btn-ghost btn-small', title: 'Next', html: iconSvg('chevronRight', 16), onclick: () => { stepCursor(1); refresh(renderCalendar); } }),
-      el('span', { class: 'cal-toolbar-label' }, label),
-    ]),
-    el('div', { class: 'cal-view-toggle' }, [
-      el('button', { type: 'button', class: 'btn btn-small' + (calendarState.view === 'month' ? ' btn-primary' : ' btn-ghost'), onclick: () => { calendarState.view = 'month'; refresh(renderCalendar); } }, 'Month'),
-      el('button', { type: 'button', class: 'btn btn-small' + (calendarState.view === 'week' ? ' btn-primary' : ' btn-ghost'), onclick: () => { calendarState.view = 'week'; refresh(renderCalendar); } }, 'Week'),
     ]),
   ]);
 }
 
-function stepCursor(dir) {
-  if (calendarState.view === 'month') {
-    calendarState.cursor = new Date(calendarState.cursor.getFullYear(), calendarState.cursor.getMonth() + dir, 1);
-  } else {
-    calendarState.cursor = addDays(calendarState.cursor, dir * 7);
-  }
-}
-
-function buildMonthGrid(itemsByDay) {
-  const cursor = calendarState.cursor;
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const startDate = addDays(firstOfMonth, -firstOfMonth.getDay());
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalCells = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
-  const today = new Date();
-  const cap = 4;
-
-  const grid = el('div', { class: 'cal-month-grid' });
-  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d) => grid.appendChild(el('div', { class: 'cal-weekday-head' }, d)));
-
-  for (let i = 0; i < totalCells; i++) {
-    const day = addDays(startDate, i);
-    const key = dateKey(day);
-    const inMonth = day.getMonth() === month;
-    const dayItems = itemsByDay.get(key) || [];
-    const expanded = calendarExpandedDays.has(key);
-    const visible = expanded ? dayItems : dayItems.slice(0, cap);
-
-    const cell = el('div', { class: 'cal-day-cell' + (inMonth ? '' : ' cal-day-outside') + (isSameDay(day, today) ? ' cal-day-today' : '') });
-    cell.appendChild(el('div', { class: 'cal-day-number' }, String(day.getDate())));
-    const pillsWrap = el('div', { class: 'cal-day-pills' });
-    visible.forEach((item) => pillsWrap.appendChild(renderCalPill(item)));
-    if (!expanded && dayItems.length > cap) {
-      pillsWrap.appendChild(el('button', {
-        type: 'button',
-        class: 'cal-more-btn',
-        onclick: () => { calendarExpandedDays.add(key); refresh(renderCalendar); },
-      }, `+${dayItems.length - cap} more`));
-    }
-    cell.appendChild(pillsWrap);
-    wireDropTarget(cell, key, null);
-    cell.addEventListener('click', (e) => {
-      if (e.target.closest('.cal-pill') || e.target.closest('.cal-more-btn')) return;
-      onCellClick(key, null);
-    });
-    grid.appendChild(cell);
-  }
-  return grid;
-}
-
-function buildWeekGrid(itemsByDay) {
-  const start = startOfWeek(calendarState.cursor);
-  const days = [...Array(7)].map((_, i) => addDays(start, i));
-  const today = new Date();
-  const wrap = el('div', { class: 'cal-week-wrap' });
-
-  const header = el('div', { class: 'cal-week-header' });
-  header.appendChild(el('div', { class: 'cal-week-gutter' }));
-  days.forEach((day) => header.appendChild(el('div', { class: 'cal-week-day-head' + (isSameDay(day, today) ? ' cal-day-today' : '') }, [
-    el('div', { class: 'cal-week-day-name' }, day.toLocaleDateString(undefined, { weekday: 'short' })),
-    el('div', { class: 'cal-week-day-num' }, String(day.getDate())),
-  ])));
-  wrap.appendChild(header);
-
-  const allDayRow = el('div', { class: 'cal-week-allday-row' });
-  allDayRow.appendChild(el('div', { class: 'cal-week-gutter' }, 'All day'));
-  days.forEach((day) => {
-    const key = dateKey(day);
-    const cell = el('div', { class: 'cal-week-allday-cell' });
-    (itemsByDay.get(key) || []).filter((i) => i.calendarAllDay).forEach((item) => cell.appendChild(renderCalPill(item)));
-    wireDropTarget(cell, key, null);
-    cell.addEventListener('click', (e) => { if (e.target.closest('.cal-pill')) return; onCellClick(key, null); });
-    allDayRow.appendChild(cell);
-  });
-  wrap.appendChild(allDayRow);
-
-  const body = el('div', { class: 'cal-week-body' });
-  const gutter = el('div', { class: 'cal-week-hours-gutter' });
-  for (let h = 0; h < 24; h++) gutter.appendChild(el('div', { class: 'cal-week-hour-label' }, formatHourLabel(h)));
-  body.appendChild(gutter);
-
-  days.forEach((day) => {
-    const key = dateKey(day);
-    const col = el('div', { class: 'cal-week-day-col' + (isSameDay(day, today) ? ' cal-day-today' : '') });
-    for (let h = 0; h < 24; h++) {
-      const slot = el('div', { class: 'cal-week-hour-slot' });
-      wireDropTarget(slot, key, h);
-      slot.addEventListener('click', () => onCellClick(key, h));
-      col.appendChild(slot);
-    }
-    const timed = (itemsByDay.get(key) || []).filter((i) => !i.calendarAllDay);
-    layoutOverlaps(timed).forEach(({ item, startMin, durMin, col: colIdx, cols }) => {
-      const pill = renderCalPill(item);
-      pill.classList.add('cal-week-timed-pill');
-      pill.style.top = (startMin / 60) * HOUR_HEIGHT + 'px';
-      pill.style.height = Math.max((durMin / 60) * HOUR_HEIGHT - 2, 18) + 'px';
-      pill.style.left = (colIdx / cols) * 100 + '%';
-      pill.style.width = 100 / cols + '%';
-      col.appendChild(pill);
-    });
-    body.appendChild(col);
-  });
-  wrap.appendChild(body);
-  requestAnimationFrame(() => { body.scrollTop = 7 * HOUR_HEIGHT; });
-  return wrap;
-}
-
-function unscheduledTray(items) {
-  const wrap = el('div', { class: 'cal-tray' });
-  wrap.appendChild(el('h3', { class: 'group-heading' }, `To Schedule (${items.length})`));
-  if (!items.length) {
-    wrap.appendChild(el('div', { class: 'empty-state empty-state-small' }, 'Nothing waiting to be scheduled — every open Next Action is either placed on the calendar already or has no project gating it.'));
-    return wrap;
-  }
-  const list = el('div', { class: 'cal-tray-list' });
-  items.forEach((item) => {
-    const armed = calendarArmedId === item.id;
-    const row = el('div', {
-      class: 'cal-tray-item' + (armed ? ' cal-armed' : ''),
-      'data-item-id': item.id,
-      title: 'Drag onto a day, or tap then tap a day to move it there',
-      onclick: () => toggleArmed(item),
-    }, [
-      el('span', { class: 'cal-tray-handle', html: iconSvg('dragHandle', 13) }),
-      el('span', { class: 'cal-tray-title' }, item.title),
-    ]);
-    wireDragSource(row, item);
-    list.appendChild(row);
-  });
-  wrap.appendChild(list);
-  return wrap;
-}
-
+// Someday/Maybe items whose tickler date has arrived (or is still ahead) —
+// unrelated to Google Calendar, this is purely an in-app reminder to revisit
+// a parked idea, so it stays on this page as a plain review list.
 function ticklerReviewPanel(somedayTickled) {
-  const wrap = el('div', { class: 'cal-tray' });
-  wrap.appendChild(el('h3', { class: 'group-heading' }, 'Someday/Maybe Tickler Reviews'));
+  const wrap = el('div', { class: 'card' });
+  wrap.appendChild(el('h3', {}, 'Someday/Maybe Tickler Reviews'));
   const ready = somedayTickled.filter((i) => isPast(i.tickleDate) || isToday(i.tickleDate));
   const upcoming = somedayTickled.filter((i) => !isPast(i.tickleDate) && !isToday(i.tickleDate)).sort((a, b) => new Date(a.tickleDate) - new Date(b.tickleDate));
   if (!ready.length && !upcoming.length) {
@@ -1319,88 +968,60 @@ function ticklerReviewPanel(somedayTickled) {
   return wrap;
 }
 
-export async function renderCalendar() {
-  // Calendar is "the calendar section" — the other place (besides Settings)
-  // where a silent Google reconnect is allowed to happen without the user
-  // having clicked Connect this session. See GCal.reconnectIfNeeded in
-  // gcal.js for why this isn't done on app startup.
-  GCal.reconnectIfNeeded().catch((e) => console.warn('Calendar reconnect:', e.message));
-
+export async function renderSchedule() {
   const allItems = await DB.getAll('items');
-  // Events/ticklers (type:'calendar') and scheduled tasks (an activated,
-  // open-or-done next-action with a calendarDate) both live on the grid.
-  const dated = allItems.filter((i) => i.calendarDate && (i.type === 'calendar' || (i.type === 'next-action' && i.activated !== false)));
-  const itemsByDay = new Map();
-  dated.forEach((item) => {
-    const key = dateKey(new Date(item.calendarDate));
-    if (!itemsByDay.has(key)) itemsByDay.set(key, []);
-    itemsByDay.get(key).push(item);
-  });
-  itemsByDay.forEach((list) => list.sort((a, b) => {
-    if (a.calendarAllDay !== b.calendarAllDay) return a.calendarAllDay ? -1 : 1;
-    return new Date(a.calendarDate) - new Date(b.calendarDate);
-  }));
+  const projects = await DB.getAll('projects');
 
-  const unscheduledTasks = allItems
-    .filter((i) => i.type === 'next-action' && !i.completed && i.activated !== false && !i.calendarDate)
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  // Standalone schedule items (created here or via Clarify), plus any open
+  // Next Action explicitly flagged via the "Schedule" button on the Next
+  // Actions list.
+  const items = allItems.filter(
+    (i) => i.type === 'calendar' || (i.type === 'next-action' && i.wantsScheduling && !i.completed)
+  );
+  const pending = items.filter((i) => !i.scheduled).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const scheduled = items
+    .filter((i) => i.scheduled)
+    .sort((a, b) => new Date(b.scheduledAt || b.createdAt) - new Date(a.scheduledAt || a.createdAt));
   const somedayTickled = allItems.filter((i) => i.tickleDate && !i.completed);
 
   const r = root();
   r.innerHTML = '';
-  r.classList.add('calendar-view');
 
   r.appendChild(
-    pageHeader('Calendar', 'Events, scheduled tasks, and ticklers — all in one place.', [
-      el('button', { class: 'btn btn-ghost', onclick: () => downloadTextFile('gtd-calendar.md', calendarToMarkdown(dated, somedayTickled)) }, iconLabel('download', 'Export .md')),
-      el('button', { class: 'btn btn-primary', onclick: () => openAddChooser() }, iconLabel('plus', 'Add')),
+    pageHeader('To-Do Schedule', "Things to add to your Google Calendar — check them off once you've scheduled them there.", [
+      el('button', { class: 'btn btn-ghost', onclick: () => downloadTextFile('gtd-schedule.md', scheduleToMarkdown(items, somedayTickled)) }, iconLabel('download', 'Export .md')),
+      el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'calendar', onSaved: () => refresh(renderSchedule) }) }, iconLabel('plus', 'Add')),
     ])
   );
 
-  if (calendarArmedId) {
-    const armedItem = dated.find((i) => i.id === calendarArmedId) || unscheduledTasks.find((i) => i.id === calendarArmedId);
-    r.appendChild(
-      el('div', { class: 'cal-armed-banner' }, [
-        el('span', {}, `Moving "${armedItem ? armedItem.title : 'item'}" — tap a day to place it there.`),
-        el('button', { type: 'button', class: 'btn btn-ghost btn-small', onclick: () => { calendarArmedId = null; refresh(renderCalendar); } }, 'Cancel'),
-      ])
-    );
+  if (!pending.length && !scheduled.length) {
+    r.appendChild(emptyState('Nothing to schedule yet. Add something above, or tap "Schedule" on a Next Action.'));
+  } else {
+    const list = el('div', { class: 'list' });
+    if (!pending.length) list.appendChild(emptyState('Nothing left to schedule — nice work.'));
+    pending.forEach((item) => list.appendChild(scheduleRow(item, projects)));
+    r.appendChild(list);
+
+    if (scheduled.length) {
+      const doneList = el('div', { class: 'list collapsed' });
+      scheduled.forEach((item) => doneList.appendChild(scheduleRow(item, projects)));
+      r.appendChild(
+        el('h3', {
+          class: 'group-heading group-heading-collapsible collapsed',
+          onclick: (e) => {
+            e.currentTarget.classList.toggle('collapsed');
+            doneList.classList.toggle('collapsed');
+          },
+        }, [
+          el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+          el('span', {}, `Scheduled (${scheduled.length})`),
+        ])
+      );
+      r.appendChild(doneList);
+    }
   }
 
-  r.appendChild(calendarToolbar());
-
-  r.appendChild(
-    el('div', { class: 'cal-legend' }, [
-      el('span', { class: 'cal-legend-item' }, [el('span', { class: 'cal-legend-dot cal-pill-event' }), 'Event']),
-      el('span', { class: 'cal-legend-item' }, [el('span', { class: 'cal-legend-dot cal-pill-task' }), 'Task']),
-      el('span', { class: 'cal-legend-item' }, [el('span', { class: 'cal-legend-dot cal-pill-tickler' }), 'Tickler']),
-    ])
-  );
-
-  const layout = el('div', { class: 'cal-layout' });
-  const main = el('div', { class: 'cal-main' });
-  main.appendChild(calendarState.view === 'month' ? buildMonthGrid(itemsByDay) : buildWeekGrid(itemsByDay));
-  layout.appendChild(main);
-
-  const sidebar = el('div', { class: 'cal-sidebar' });
-  sidebar.appendChild(unscheduledTray(unscheduledTasks));
-  sidebar.appendChild(ticklerReviewPanel(somedayTickled));
-  layout.appendChild(sidebar);
-
-  r.appendChild(layout);
-
-  if (calendarFocusId) {
-    const id = calendarFocusId;
-    calendarFocusId = null;
-    requestAnimationFrame(() => {
-      const target = r.querySelector(`[data-item-id="${id}"]`);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.classList.add('cal-flash');
-        setTimeout(() => target.classList.remove('cal-flash'), 2200);
-      }
-    });
-  }
+  r.appendChild(ticklerReviewPanel(somedayTickled));
 }
 
 // ------------------------------------------------------------- REFERENCE --
