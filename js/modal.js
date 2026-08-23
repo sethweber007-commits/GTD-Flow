@@ -109,11 +109,11 @@ function wireKeyboardAvoidance(hostEl) {
   };
 }
 
-// -- Item form (used by Inbox, Next Actions, Waiting For, Someday, To-Do Schedule, Reference) --
-// `type: 'calendar'` is the To-Do Schedule page's item type (see
-// views/workflow.js's SCHEDULE section) — just a title, an optional project
+// -- Item form (used by Inbox, Next Actions, Waiting For, Someday, Calendar, Reference) --
+// `type: 'calendar'` is the Calendar page's item type (see
+// views/workflow.js's CALENDAR section) — just a title, an optional project
 // link, and notes. Whether it's been scheduled is tracked separately (a
-// checkbox on the To-Do Schedule list itself), not through this form.
+// checkbox on the Calendar list itself), not through this form.
 export async function openItemForm({ item = null, type, defaults = {}, onSaved, focusSection = false }) {
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
   const sections = type === 'someday' ? await DB.getByIndex('sections', 'view', type) : [];

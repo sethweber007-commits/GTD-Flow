@@ -44,7 +44,7 @@ function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomed
         ? el('button', {
             type: 'button',
             class: 'btn btn-ghost btn-small',
-            title: item.wantsScheduling ? 'Remove from your To-Do Schedule' : 'Add to your To-Do Schedule',
+            title: item.wantsScheduling ? 'Remove from Calendar' : 'Add to Calendar',
             onclick: () => onSchedule(item),
           }, iconLabel('calendar', item.wantsScheduling ? 'On Schedule' : 'Schedule', 14))
         : null,
@@ -106,14 +106,14 @@ async function activateAction(item, onDone) {
   onDone();
 }
 
-// Toggles a Next Action's membership on the To-Do Schedule checklist (see
-// the SCHEDULE section below). Re-adding after a removal always starts
+// Toggles a Next Action's membership on the Calendar checklist (see the
+// SCHEDULE section below). Re-adding after a removal always starts
 // unchecked again, rather than reusing whatever "scheduled" state it had
 // last time.
 async function toggleWantsScheduling(item, onDone) {
   const wants = !item.wantsScheduling;
   await DB.put('items', { ...item, wantsScheduling: wants, scheduled: wants ? false : item.scheduled });
-  toast(wants ? 'Added to To-Do Schedule' : 'Removed from To-Do Schedule');
+  toast(wants ? 'Added to Calendar' : 'Removed from Calendar');
   onDone();
 }
 
@@ -868,7 +868,7 @@ export async function renderSomeday() {
   draw();
 }
 
-// -------------------------------------------------------- TO-DO SCHEDULE --
+// -------------------------------------------------------------- CALENDAR --
 // A flat checklist of things you intend to put on your own Google Calendar.
 // This app never talks to the Google Calendar API — there's no OAuth
 // connection and nothing is pushed anywhere automatically. You add the
@@ -883,7 +883,7 @@ export async function renderSomeday() {
 function scheduleToMarkdown(items, somedayTickled) {
   const pending = items.filter((i) => !i.scheduled);
   const scheduled = items.filter((i) => i.scheduled);
-  let md = `# To-Do Schedule\n\n_Exported ${new Date().toLocaleString()}_\n\n## To schedule\n\n`;
+  let md = `# Calendar\n\n_Exported ${new Date().toLocaleString()}_\n\n## To schedule\n\n`;
   md += pending.length
     ? pending.map((item) => `- **${item.title}**${item.notes ? `\n  ${mdEscape(item.notes)}` : ''}`).join('\n')
     : '_Nothing waiting to be scheduled._';
@@ -921,7 +921,7 @@ function scheduleRow(item, projects) {
         : el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'calendar', onSaved: () => refresh(renderSchedule) }) }),
       el('button', {
         class: 'icon-btn',
-        title: isAction ? 'Remove from To-Do Schedule' : 'Delete',
+        title: isAction ? 'Remove from Calendar' : 'Delete',
         html: iconSvg(isAction ? 'x' : 'trash', 16),
         onclick: async () => {
           if (isAction) {
@@ -988,8 +988,8 @@ export async function renderSchedule() {
   r.innerHTML = '';
 
   r.appendChild(
-    pageHeader('To-Do Schedule', "Things to add to your Google Calendar — check them off once you've scheduled them there.", [
-      el('button', { class: 'btn btn-ghost', onclick: () => downloadTextFile('gtd-schedule.md', scheduleToMarkdown(items, somedayTickled)) }, iconLabel('download', 'Export .md')),
+    pageHeader('Calendar', "Things to add to your Google Calendar — check them off once you've scheduled them there.", [
+      el('button', { class: 'btn btn-ghost', onclick: () => downloadTextFile('gtd-calendar.md', scheduleToMarkdown(items, somedayTickled)) }, iconLabel('download', 'Export .md')),
       el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'calendar', onSaved: () => refresh(renderSchedule) }) }, iconLabel('plus', 'Add')),
     ])
   );

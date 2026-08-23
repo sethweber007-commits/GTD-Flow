@@ -45,14 +45,14 @@ a folder in your own Google Drive.
   date, one-click "Activate" into a real next action, custom **sections**
   for grouping ideas, and a "Export .md" button to save the whole list as a
   Markdown file.
-- **To-Do Schedule** — a plain checklist of things you intend to put on your
-  own Google Calendar. Add an item (from Clarify's "Schedule" step, the
-  To-Do Schedule page itself, or the "Schedule" button on any Next Action),
-  then add it to Google Calendar yourself and check it off here as your
-  record that it's done. There's no Google Calendar API connection and
-  nothing is ever pushed anywhere automatically — this is purely a manual
-  checklist. Also shows Someday/Maybe items whose tickler date has arrived,
-  and exports to Markdown.
+- **Calendar** — a plain checklist of things you intend to put on your own
+  Google Calendar. Add an item (from Clarify's "Schedule" step, the
+  Calendar page itself, or the "Schedule" button on any Next Action), then
+  add it to Google Calendar yourself and check it off here as your record
+  that it's done. There's no Google Calendar API connection and nothing is
+  ever pushed anywhere automatically — this is purely a manual checklist.
+  Also shows Someday/Maybe items whose tickler date has arrived, and
+  exports to Markdown.
 - **Reference** — a searchable, categorized filing system for
   non-actionable material you want to keep (see *References*, below).
   Marking an inbox item as Reference during Clarify immediately opens the
@@ -139,7 +139,7 @@ gtd-pwa/
 │   ├── icons.js                   Inline-SVG icon set
 │   └── views/
 │       ├── workflow.js            Inbox, Clarify, Next Actions, Projects,
-│       │                          Waiting For, Someday, To-Do Schedule,
+│       │                          Waiting For, Someday, Calendar,
 │       │                          Reference, Weekly Review
 │       ├── horizons.js             Purpose/Vision/Goals/Areas, one accordion tab
 │       └── settings.js              Drive backup UI, contexts, data tools

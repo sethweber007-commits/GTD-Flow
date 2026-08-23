@@ -33,9 +33,9 @@ async function main() {
   route('/projects/:id', ({ id }) => renderProjectDetail(id));
   route('/waiting-for', renderWaitingFor);
   route('/someday', renderSomeday);
-  route('/schedule', renderSchedule);
-  // Old deep link from the previous Calendar page.
-  route('/calendar', () => navigate('/schedule'));
+  route('/calendar', renderSchedule);
+  // Old deep link from the section's brief stint as "To-Do Schedule".
+  route('/schedule', () => navigate('/calendar'));
   route('/reference', renderReference);
   route('/review', renderReview);
   route('/horizons', renderHorizons);
@@ -89,18 +89,25 @@ function paintBadge(id, count) {
 // Sidebar counters: Inbox counts everything waiting to be clarified; Next
 // Actions and Waiting For count what's actually open on those lists (same
 // filters those views use); Projects counts active (in-progress) projects —
-// on-hold/someday/completed projects aren't part of the current working set.
+// on-hold/someday/completed projects aren't part of the current working set;
+// Calendar counts items still waiting to be scheduled (same "pending" set
+// renderSchedule shows above the fold) — standalone calendar items plus Next
+// Actions flagged via the "Schedule" button, both not yet checked off.
 async function updateNavBadges() {
-  const [inboxItems, allActions, waitingItems, projects] = await Promise.all([
+  const [inboxItems, allActions, waitingItems, projects, calendarItems] = await Promise.all([
     DB.getByIndex('items', 'type', 'inbox'),
     DB.getByIndex('items', 'type', 'next-action'),
     DB.getByIndex('items', 'type', 'waiting-for'),
     DB.getAll('projects'),
+    DB.getByIndex('items', 'type', 'calendar'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed && i.activated !== false).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   paintBadge('projects-badge', projects.filter((p) => p.status === 'active').length);
+  const pendingCalendarItems = calendarItems.filter((i) => !i.scheduled).length;
+  const pendingFlaggedActions = allActions.filter((i) => i.wantsScheduling && !i.completed && !i.scheduled).length;
+  paintBadge('calendar-badge', pendingCalendarItems + pendingFlaggedActions);
 }
 
 let deferredInstallPrompt = null;
