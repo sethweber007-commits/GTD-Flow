@@ -514,8 +514,13 @@ select.clarify-input { background: var(--surface); }
 .cal-main { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .cal-sidebar { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 
-/* Month grid */
-.cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+/* Month grid. `minmax(0, 1fr)` (not bare `1fr`) matters here: a day cell
+   holding a long, unbroken pill title (.cal-pill-title is nowrap) would
+   otherwise inflate that column's automatic minimum size to fit the text,
+   blowing the track out and crushing the other six days down to near
+   nothing — invisible on a phone-width screen even though it's harmless on
+   a wide desktop layout with room to spare. */
+.cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal-weekday-head {
   padding: 8px 6px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--muted); text-align: center; border-bottom: 1px solid var(--border); background: var(--bg);
@@ -621,4 +626,29 @@ select.clarify-input { background: var(--surface); }
   .cal-layout { grid-template-columns: 1fr; }
   .cal-day-cell { min-height: 70px; }
   .cal-pill-handle { display: inline-flex; }
+  /* Month-view day cells are only ~45px wide on a phone — even after
+     dropping the time label, the checkbox + drag handle alone (~34px incl.
+     gaps) leave zero room for a title, so every pill shows as a blank
+     stub. Month-view pills go read-only on mobile: tapping still opens the
+     editor (complete/reschedule/see time from there); the checkbox and
+     touch drag handle stay in the week view where columns are wide enough
+     for them to coexist with a title. */
+  .cal-day-pills .cal-pill-time,
+  .cal-day-pills .cal-pill-check,
+  .cal-day-pills .cal-pill-handle { display: none; }
+
+  /* Week view's day columns use `flex: 1; min-width: 0` on wide screens so
+     the grid exactly fills the available width. On a phone that same rule
+     lets 7 columns get crushed down to ~40px each — and less still once an
+     overlapping-events cluster splits a column further — leaving pills too
+     narrow to show any title text. Give columns a fixed floor instead and
+     let the row scroll horizontally, matching how Google Calendar's mobile
+     web view handles the week grid. */
+  .cal-week-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cal-week-day-head, .cal-week-allday-cell, .cal-week-day-col { flex: 0 0 88px; min-width: 88px; }
+  /* Even at the widened 88px column, checkbox + handle + a "9:00 AM"-style
+     time label leave no room left for the title. The hour gridline the
+     pill sits against already conveys its time, so drop the label here too
+     and keep the title. */
+  .cal-week-wrap .cal-pill-time { display: none; }
 }
