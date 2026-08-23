@@ -32,6 +32,9 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v5h1"/>',
   x: '<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
   section: '<path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/><circle cx="19" cy="12" r="2.4"/>',
+  chevronLeft: '<path d="m15 6-6 6 6 6"/>',
+  chevronRight: '<path d="m9 6 6 6-6 6"/>',
+  dragHandle: '<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>',
 };
 
 export function iconSvg(name, size = 18, extraClass = '') {

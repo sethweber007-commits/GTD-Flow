@@ -110,19 +110,24 @@ function wireKeyboardAvoidance(hostEl) {
 }
 
 // -- Item form (used by Inbox, Next Actions, Waiting For, Someday, Calendar, Reference) --
+// `type: 'task'` is a form-shape only, used by the Calendar page to edit a
+// Next Action that's been placed on a specific day — it renders like a next
+// action (context, project) plus the calendar date/time fields, but always
+// saves as a real 'next-action' record (see the submit handler below) so it
+// stays the same item shown on the Next Actions list.
 export async function openItemForm({ item = null, type, defaults = {}, onSaved, focusSection = false }) {
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
   const sections = type === 'someday' ? await DB.getByIndex('sections', 'view', type) : [];
-  const contextSuggestions = type === 'next-action' || type === 'waiting-for' ? await distinctContexts() : [];
+  const contextSuggestions = ['next-action', 'waiting-for', 'task'].includes(type) ? await distinctContexts() : [];
   const isEdit = !!item;
   const data = item || { type, title: '', notes: '', ...defaults };
-  const calendarFields = type === 'calendar' ? buildCalendarDateFields(data) : null;
+  const calendarFields = type === 'calendar' || type === 'task' ? buildCalendarDateFields(data) : null;
 
   const form = el('form', { class: 'form' }, [
     el('h3', {}, isEdit ? 'Edit item' : `New ${labelFor(type)}`),
     field('Title', el('input', { type: 'text', name: 'title', required: true, value: data.title || '', placeholder: 'What is it?' })),
 
-    type === 'next-action' || type === 'waiting-for'
+    type === 'next-action' || type === 'waiting-for' || type === 'task'
       ? field('Context', contextFieldEl(contextSuggestions, data.context))
       : null,
 
@@ -130,7 +135,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
       ? field('Category (optional)', sectionFieldEl(sections, data.sectionId))
       : null,
 
-    ['next-action', 'waiting-for', 'someday', 'calendar'].includes(type)
+    ['next-action', 'waiting-for', 'someday', 'calendar', 'task'].includes(type)
       ? field('Project (optional)', projectPicker({ projects, selectedId: data.projectId }))
       : null,
 
@@ -156,7 +161,10 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    const record = { ...data, type };
+    // A 'task' is always stored as a real next-action — the pseudo-type only
+    // controls which fields this form shows (see the comment on
+    // openItemForm above).
+    const record = { ...data, type: type === 'task' ? 'next-action' : type };
     record.title = fd.get('title')?.trim();
     if (!record.title) return;
     record.notes = fd.get('notes')?.trim() || '';
@@ -209,7 +217,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     // or removed just now — leave it alone otherwise, so re-saving an
     // already-activated project action (or one someone deliberately
     // activated already) doesn't silently re-hide or re-show it.
-    if (type === 'next-action') {
+    if (record.type === 'next-action') {
       if (!isEdit) {
         record.activated = record.projectId ? !(await projectHasActiveAction(record.projectId)) : true;
       } else if (!data.projectId && record.projectId) {
@@ -521,6 +529,7 @@ function labelFor(type) {
       'waiting-for': 'waiting on',
       someday: 'someday/maybe',
       calendar: 'calendar item',
+      task: 'scheduled task',
       reference: 'reference item',
       'project-note': 'project info item',
     }[type] || 'item'

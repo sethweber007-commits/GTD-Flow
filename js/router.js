@@ -29,6 +29,11 @@ export function navigate(path) {
 
 async function render() {
   const path = location.hash.slice(1) || '/inbox';
+  // Some views (e.g. Calendar) add a class to #view-root for layout needs
+  // specific to that page — reset it on every navigation so it doesn't leak
+  // into whatever view is rendered next.
+  const viewRoot = document.getElementById('view-root');
+  if (viewRoot) viewRoot.className = '';
   for (const r of routes) {
     const m = path.match(r.regex);
     if (m) {
