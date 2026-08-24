@@ -24,11 +24,11 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomeday, onImportant, onActivate, showScheduled, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onActivate, showScheduled, meta, projectLabel } = {}) {
   const needsActivation = item.activated === false;
   const unscheduled = showScheduled && !item.scheduled;
   return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') + (unscheduled ? ' unscheduled' : '') }, [
-    onComplete && !completeAsButton
+    onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
       : null,
     el('div', { class: 'item-main' }, [
@@ -49,14 +49,6 @@ function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomed
             el('input', { type: 'checkbox', checked: item.scheduled || false, disabled: true }),
             ' Scheduled?',
           ])
-        : null,
-      onComplete && completeAsButton
-        ? el('button', {
-            class: 'icon-btn' + (item.completed ? ' activate-btn' : ''),
-            title: item.completed ? 'Mark not complete' : 'Mark complete',
-            html: iconSvg('checkCircle', 16),
-            onclick: () => onComplete(item),
-          })
         : null,
       onActivate && needsActivation
         ? el('button', {
@@ -427,7 +419,6 @@ export async function renderNextActions() {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
               refresh(renderNextActions);
             },
-            completeAsButton: true,
             showScheduled: true,
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
