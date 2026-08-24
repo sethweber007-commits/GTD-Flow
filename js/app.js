@@ -2,6 +2,7 @@ import { DB } from './db.js';
 import { seedIfEmpty } from './seed.js';
 import { Drive } from './drive.js';
 import { Sync } from './sync.js';
+import { Cleanup } from './cleanup.js';
 import { route, notFound, startRouter, navigate } from './router.js';
 import { CONFIG } from './config.js';
 import {
@@ -64,6 +65,10 @@ async function main() {
   // first place.
   Sync.init();
   Drive.init().catch((e) => console.warn('Drive init:', e.message));
+  // After Sync.init() so its change listener is already wired — any records
+  // this sweep removes/unlinks get picked up by the same debounce that
+  // pushes normal edits to Drive.
+  Cleanup.init();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch((e) => console.warn('SW registration failed', e));

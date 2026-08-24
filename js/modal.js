@@ -254,7 +254,15 @@ export async function openProjectForm({ project = null, onSaved }) {
     record.title = fd.get('title')?.trim();
     if (!record.title) return;
     record.outcome = fd.get('outcome')?.trim() || '';
-    record.status = fd.get('status');
+    const newStatus = fd.get('status');
+    // Tracks when the project actually became completed (distinct from
+    // updatedAt, which changes on every edit) — used by cleanup.js to know
+    // how long it's been sitting done. Editing a completed project's other
+    // fields doesn't reset the clock; only a genuine completed<->other
+    // status transition touches it.
+    if (newStatus === 'completed' && record.status !== 'completed') record.completedAt = new Date().toISOString();
+    else if (newStatus !== 'completed') record.completedAt = null;
+    record.status = newStatus;
     record.notes = fd.get('notes')?.trim() || '';
     const areaTitle = fd.get('areaOfFocusId');
     const area = areas.find((a) => a.title === areaTitle);

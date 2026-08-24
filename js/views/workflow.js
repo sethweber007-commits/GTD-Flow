@@ -558,7 +558,7 @@ async function sendProjectToSomeday(project, onDone) {
 }
 
 async function reactivateProject(project, onDone) {
-  await DB.put('projects', { ...project, status: 'active', sectionId: null });
+  await DB.put('projects', { ...project, status: 'active', sectionId: null, completedAt: null });
   toast('Project reactivated');
   onDone();
 }
@@ -566,9 +566,11 @@ async function reactivateProject(project, onDone) {
 // Marks a project complete without touching its linked items — any still-open
 // Next Actions or Waiting On items stay open and linked, just no longer
 // pushed for attention since the project itself has moved off the active
-// groups on the Projects page.
+// groups on the Projects page. completedAt records when this happened (as
+// opposed to updatedAt, which a later unrelated edit would bump) — cleanup.js
+// uses it to auto-purge projects completed over a month ago.
 async function completeProject(project, onDone) {
-  await DB.put('projects', { ...project, status: 'completed' });
+  await DB.put('projects', { ...project, status: 'completed', completedAt: new Date().toISOString() });
   toast('Project marked complete');
   onDone();
 }
