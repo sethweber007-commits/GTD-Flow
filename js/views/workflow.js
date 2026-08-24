@@ -546,6 +546,16 @@ async function reactivateProject(project, onDone) {
   onDone();
 }
 
+// Marks a project complete without touching its linked items — any still-open
+// Next Actions or Waiting On items stay open and linked, just no longer
+// pushed for attention since the project itself has moved off the active
+// groups on the Projects page.
+async function completeProject(project, onDone) {
+  await DB.put('projects', { ...project, status: 'completed' });
+  toast('Project marked complete');
+  onDone();
+}
+
 export async function renderProjectDetail(id) {
   const project = await DB.get('projects', id);
   const r = root();
@@ -562,7 +572,10 @@ export async function renderProjectDetail(id) {
       project.status !== 'someday' && project.status !== 'completed'
         ? el('button', { class: 'btn btn-ghost', onclick: () => sendProjectToSomeday(project, refreshMe) }, iconLabel('moon', 'Send to Someday/Maybe', 14))
         : null,
-      project.status === 'someday'
+      project.status !== 'someday' && project.status !== 'completed'
+        ? el('button', { class: 'btn btn-ghost', onclick: () => completeProject(project, refreshMe) }, iconLabel('checkCircle', 'Mark complete', 14))
+        : null,
+      project.status === 'someday' || project.status === 'completed'
         ? el('button', { class: 'btn btn-ghost', onclick: () => reactivateProject(project, refreshMe) }, iconLabel('checkCircle', 'Reactivate', 14))
         : null,
       el('button', { class: 'btn btn-ghost', onclick: () => openProjectForm({ project, onSaved: refreshMe }) }, iconLabel('edit', 'Edit', 14)),
