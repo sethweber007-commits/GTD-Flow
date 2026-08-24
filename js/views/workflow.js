@@ -462,7 +462,7 @@ export async function renderNextActions() {
         },
       }, [
         el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
-        el('span', {}, `Completed (${completedItems.length})`),
+        el('span', {}, `Completed in the last month (${completedItems.length})`),
       ])
     );
     r.appendChild(completedList);
@@ -500,6 +500,10 @@ export async function renderProjects() {
     // compete for attention with what's still active, but stays one tap
     // away, same pattern as Next Actions' Completed section.
     const isCompletedGroup = status === 'completed';
+    // Anything completed over a month ago gets auto-purged (see
+    // js/cleanup.js), so this heading is never stale — say so rather than
+    // just "Completed", which would imply this is the full history.
+    const groupLabel = isCompletedGroup ? 'Completed in the last month' : statusLabel(status);
     const list = el('div', { class: 'list' + (isCompletedGroup ? ' collapsed' : '') });
     r.appendChild(
       isCompletedGroup
@@ -511,9 +515,9 @@ export async function renderProjects() {
             },
           }, [
             el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
-            el('span', {}, `${statusLabel(status)} (${group.length})`),
+            el('span', {}, `${groupLabel} (${group.length})`),
           ])
-        : el('h3', { class: 'group-heading' }, `${statusLabel(status)} (${group.length})`)
+        : el('h3', { class: 'group-heading' }, `${groupLabel} (${group.length})`)
     );
     group.forEach((p) => {
       const linked = items.filter((i) => i.projectId === p.id && !i.completed && (i.type === 'next-action' || i.type === 'waiting-for'));
