@@ -46,11 +46,14 @@ a folder in your own Google Drive.
   for grouping ideas, and a "Export .md" button to save the whole list as a
   Markdown file.
 - **Calendar** — a plain checklist of things you intend to put on your own
-  Google Calendar. Add an item (from Clarify's "Schedule" step, the
-  Calendar page itself, or the "Schedule" button on any Next Action), then
-  add it to Google Calendar yourself and check it off here as your record
-  that it's done. There's no Google Calendar API connection and nothing is
-  ever pushed anywhere automatically — this is purely a manual checklist.
+  Google Calendar. Every open Next Action shows up here automatically
+  (alongside standalone items added from Clarify's "Schedule" step or the
+  Calendar page itself); add it to Google Calendar yourself and check it
+  off here as your record that it's done. Next Actions shows the same
+  "Scheduled?" status as a read-only checkbox and highlights unscheduled
+  ones in red, but this is the only place it can be checked off. There's no
+  Google Calendar API connection and nothing is ever pushed anywhere
+  automatically — this is purely a manual checklist.
   Also shows Someday/Maybe items whose tickler date has arrived, and
   exports to Markdown.
 - **Reference** — a searchable, categorized filing system for

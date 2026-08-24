@@ -91,8 +91,8 @@ function paintBadge(id, count) {
 // filters those views use); Projects counts active (in-progress) projects —
 // on-hold/someday/completed projects aren't part of the current working set;
 // Calendar counts items still waiting to be scheduled (same "pending" set
-// renderSchedule shows above the fold) — standalone calendar items plus Next
-// Actions flagged via the "Schedule" button, both not yet checked off.
+// renderSchedule shows above the fold) — standalone calendar items plus every
+// open Next Action, both not yet checked off as scheduled.
 async function updateNavBadges() {
   const [inboxItems, allActions, waitingItems, projects, calendarItems] = await Promise.all([
     DB.getByIndex('items', 'type', 'inbox'),
@@ -106,7 +106,7 @@ async function updateNavBadges() {
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   paintBadge('projects-badge', projects.filter((p) => p.status === 'active').length);
   const pendingCalendarItems = calendarItems.filter((i) => !i.scheduled).length;
-  const pendingFlaggedActions = allActions.filter((i) => i.wantsScheduling && !i.completed && !i.scheduled).length;
+  const pendingFlaggedActions = allActions.filter((i) => !i.completed && !i.scheduled).length;
   paintBadge('calendar-badge', pendingCalendarItems + pendingFlaggedActions);
 }
 

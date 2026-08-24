@@ -251,6 +251,12 @@ body {
 .item-row.project-row:hover { border-color: var(--primary); }
 .item-row.stalled { border-left: 3px solid var(--danger); }
 .item-row.important { border-left: 3px solid var(--warn); }
+.item-row.unscheduled { background: var(--danger-light); border-color: var(--danger); }
+.scheduled-check {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.scheduled-check input[type="checkbox"] { margin-top: 0; cursor: default; }
 .stalled-badge { display: inline-flex; align-items: center; gap: 3px; color: var(--danger); font-size: 12px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
 .item-row.completed .item-title { text-decoration: line-through; color: var(--muted); }
 .item-row.muted { opacity: 0.6; }

@@ -24,9 +24,10 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomeday, onImportant, onActivate, onSchedule, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomeday, onImportant, onActivate, showScheduled, meta, projectLabel } = {}) {
   const needsActivation = item.activated === false;
-  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
+  const unscheduled = showScheduled && !item.scheduled;
+  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') + (unscheduled ? ' unscheduled' : '') }, [
     onComplete && !completeAsButton
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
       : null,
@@ -40,13 +41,14 @@ function itemRow(item, { onComplete, completeAsButton, onEdit, onDelete, onSomed
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
-      onSchedule
-        ? el('button', {
-            type: 'button',
-            class: 'btn btn-ghost btn-small',
-            title: item.wantsScheduling ? 'Remove from Calendar' : 'Add to Calendar',
-            onclick: () => onSchedule(item),
-          }, iconLabel('calendar', item.wantsScheduling ? 'On Schedule' : 'Schedule', 14))
+      showScheduled
+        ? el('label', {
+            class: 'scheduled-check',
+            title: item.scheduled ? 'Scheduled — checked off on the Calendar tab' : 'Not yet scheduled — check it off on the Calendar tab',
+          }, [
+            el('input', { type: 'checkbox', checked: item.scheduled || false, disabled: true }),
+            ' Scheduled?',
+          ])
         : null,
       onComplete && completeAsButton
         ? el('button', {
@@ -103,17 +105,6 @@ async function toggleImportant(item, onDone) {
 async function activateAction(item, onDone) {
   await DB.put('items', { ...item, activated: true });
   toast('Activated — now on Next Actions');
-  onDone();
-}
-
-// Toggles a Next Action's membership on the Calendar checklist (see the
-// SCHEDULE section below). Re-adding after a removal always starts
-// unchecked again, rather than reusing whatever "scheduled" state it had
-// last time.
-async function toggleWantsScheduling(item, onDone) {
-  const wants = !item.wantsScheduling;
-  await DB.put('items', { ...item, wantsScheduling: wants, scheduled: wants ? false : item.scheduled });
-  toast(wants ? 'Added to Calendar' : 'Removed from Calendar');
   onDone();
 }
 
@@ -437,7 +428,7 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             completeAsButton: true,
-            onSchedule: (it) => toggleWantsScheduling(it, () => refresh(renderNextActions)),
+            showScheduled: true,
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
@@ -873,12 +864,13 @@ export async function renderSomeday() {
 // This app never talks to the Google Calendar API — there's no OAuth
 // connection and nothing is pushed anywhere automatically. You add the
 // event to Google Calendar yourself, then check it off here as your record
-// that it's been scheduled. Two kinds of item can appear: standalone
+// that it's been scheduled. Two kinds of item appear: standalone
 // type:'calendar' items (created here, or from Clarify's "Schedule" step)
-// and Next Actions flagged via the "Schedule" button on the Next Actions
-// list (wantsScheduling: true) — because a flagged action is literally the
-// same record shown there, checking it off here is just one DB.put, same as
-// everywhere else in the app.
+// and every open Next Action — because a Next Action is literally the same
+// record shown there, checking it off here is just one DB.put, same as
+// everywhere else in the app. The Next Actions list shows the same
+// "Scheduled?" state read-only (see itemRow's showScheduled) and highlights
+// unscheduled ones in red, but this is the only place it can be checked off.
 
 function scheduleToMarkdown(items, somedayTickled) {
   const pending = items.filter((i) => !i.scheduled);
@@ -919,20 +911,19 @@ function scheduleRow(item, projects) {
       isAction
         ? el('button', { class: 'icon-btn', title: 'Open in Next Actions', html: iconSvg('checkCircle', 16), onclick: () => navigate('/next-actions') })
         : el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'calendar', onSaved: () => refresh(renderSchedule) }) }),
-      el('button', {
-        class: 'icon-btn',
-        title: isAction ? 'Remove from Calendar' : 'Delete',
-        html: iconSvg(isAction ? 'x' : 'trash', 16),
-        onclick: async () => {
-          if (isAction) {
-            await DB.put('items', { ...item, wantsScheduling: false, scheduled: false });
-            refresh(renderSchedule);
-          } else if (await confirmModal(`Delete "${item.title}"?`)) {
-            await DB.remove('items', item.id);
-            refresh(renderSchedule);
-          }
-        },
-      }),
+      !isAction
+        ? el('button', {
+            class: 'icon-btn',
+            title: 'Delete',
+            html: iconSvg('trash', 16),
+            onclick: async () => {
+              if (await confirmModal(`Delete "${item.title}"?`)) {
+                await DB.remove('items', item.id);
+                refresh(renderSchedule);
+              }
+            },
+          })
+        : null,
     ]),
   ]);
 }
@@ -972,11 +963,10 @@ export async function renderSchedule() {
   const allItems = await DB.getAll('items');
   const projects = await DB.getAll('projects');
 
-  // Standalone schedule items (created here or via Clarify), plus any open
-  // Next Action explicitly flagged via the "Schedule" button on the Next
-  // Actions list.
+  // Standalone schedule items (created here or via Clarify), plus every open
+  // Next Action — all of them live on this checklist by default now.
   const items = allItems.filter(
-    (i) => i.type === 'calendar' || (i.type === 'next-action' && i.wantsScheduling && !i.completed)
+    (i) => i.type === 'calendar' || (i.type === 'next-action' && !i.completed)
   );
   const pending = items.filter((i) => !i.scheduled).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const scheduled = items
@@ -995,7 +985,7 @@ export async function renderSchedule() {
   );
 
   if (!pending.length && !scheduled.length) {
-    r.appendChild(emptyState('Nothing to schedule yet. Add something above, or tap "Schedule" on a Next Action.'));
+    r.appendChild(emptyState('Nothing to schedule yet. Add something above.'));
   } else {
     const list = el('div', { class: 'list' });
     if (!pending.length) list.appendChild(emptyState('Nothing left to schedule — nice work.'));
