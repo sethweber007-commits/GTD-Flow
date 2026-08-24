@@ -496,8 +496,25 @@ export async function renderProjects() {
     // most needing attention — float to the top of their status group.
     const group = projects.filter((p) => p.status === status).sort((a, b) => openActionCount(a) - openActionCount(b));
     if (!group.length) return;
-    r.appendChild(el('h3', { class: 'group-heading' }, `${statusLabel(status)} (${group.length})`));
-    const list = el('div', { class: 'list' });
+    // Completed projects are collapsed by default — done work shouldn't
+    // compete for attention with what's still active, but stays one tap
+    // away, same pattern as Next Actions' Completed section.
+    const isCompletedGroup = status === 'completed';
+    const list = el('div', { class: 'list' + (isCompletedGroup ? ' collapsed' : '') });
+    r.appendChild(
+      isCompletedGroup
+        ? el('h3', {
+            class: 'group-heading group-heading-collapsible collapsed',
+            onclick: (e) => {
+              e.currentTarget.classList.toggle('collapsed');
+              list.classList.toggle('collapsed');
+            },
+          }, [
+            el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+            el('span', {}, `${statusLabel(status)} (${group.length})`),
+          ])
+        : el('h3', { class: 'group-heading' }, `${statusLabel(status)} (${group.length})`)
+    );
     group.forEach((p) => {
       const linked = items.filter((i) => i.projectId === p.id && !i.completed && (i.type === 'next-action' || i.type === 'waiting-for'));
       const stalled = status === 'active' && linked.length === 0;
