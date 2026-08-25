@@ -75,6 +75,12 @@ body {
   border-right: 1px solid var(--border);
   padding: 16px 10px;
   overflow-y: auto;
+  /* Stays put while a long section (e.g. Next Actions) scrolls past it,
+     instead of scrolling away with the rest of the page. */
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  height: calc(100vh - 56px);
 }
 .nav-section-label {
   font-size: 11px;

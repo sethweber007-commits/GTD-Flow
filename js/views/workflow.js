@@ -489,62 +489,82 @@ export async function renderProjects() {
     return;
   }
 
+  const searchBox = el('input', { type: 'search', placeholder: 'Search projects…', class: 'search-box' });
+  r.appendChild(searchBox);
+
+  const listWrap = el('div', { id: 'projects-list' });
+  r.appendChild(listWrap);
+
   const openActionCount = (p) => items.filter((i) => i.projectId === p.id && !i.completed && (i.type === 'next-action' || i.type === 'waiting-for')).length;
 
-  ['active', 'on-hold', 'completed'].forEach((status) => {
-    // Projects with no open next action (or waiting-on item) — the ones
-    // most needing attention — float to the top of their status group.
-    const group = projects.filter((p) => p.status === status).sort((a, b) => openActionCount(a) - openActionCount(b));
-    if (!group.length) return;
-    // Completed projects are collapsed by default — done work shouldn't
-    // compete for attention with what's still active, but stays one tap
-    // away, same pattern as Next Actions' Completed section.
-    const isCompletedGroup = status === 'completed';
-    // Anything completed over a month ago gets auto-purged (see
-    // js/cleanup.js), so this heading is never stale — say so rather than
-    // just "Completed", which would imply this is the full history.
-    const groupLabel = isCompletedGroup ? 'Completed in the last month' : statusLabel(status);
-    const list = el('div', { class: 'list' + (isCompletedGroup ? ' collapsed' : '') });
-    r.appendChild(
-      isCompletedGroup
-        ? el('h3', {
-            class: 'group-heading group-heading-collapsible collapsed',
-            onclick: (e) => {
-              e.currentTarget.classList.toggle('collapsed');
-              list.classList.toggle('collapsed');
-            },
-          }, [
-            el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
-            el('span', {}, `${groupLabel} (${group.length})`),
-          ])
-        : el('h3', { class: 'group-heading' }, `${groupLabel} (${group.length})`)
+  function draw(filterText = '') {
+    listWrap.innerHTML = '';
+    const filtered = visibleProjects.filter((p) =>
+      !filterText || (p.title + ' ' + (p.outcome || '') + ' ' + (p.notes || '')).toLowerCase().includes(filterText.toLowerCase())
     );
-    group.forEach((p) => {
-      const linked = items.filter((i) => i.projectId === p.id && !i.completed && (i.type === 'next-action' || i.type === 'waiting-for'));
-      const stalled = status === 'active' && linked.length === 0;
-      // Stop the row's own onclick (navigate to detail) from firing when a
-      // quick-action button inside it is clicked.
-      const stopNav = (fn) => (e) => { e.stopPropagation(); fn(); };
-      list.appendChild(
-        el('div', { class: 'item-row project-row' + (stalled ? ' stalled' : ''), onclick: () => navigate(`/projects/${p.id}`) }, [
-          el('div', { class: 'item-main' }, [
-            el('div', { class: 'item-title' }, [
-              p.title,
-              stalled ? el('span', { class: 'stalled-badge', html: iconSvg('alertTriangle', 13) + ' stalled' }) : null,
-            ].filter(Boolean)),
-            p.outcome ? el('div', { class: 'item-notes' }, p.outcome) : null,
-            el('div', { class: 'item-meta' }, `${linked.length} open action${linked.length === 1 ? '' : 's'}`),
-          ].filter(Boolean)),
-          el('div', { class: 'item-actions' }, [
-            status !== 'completed'
-              ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: stopNav(() => sendProjectToSomeday(p, () => refresh(renderProjects))) })
-              : null,
-          ].filter(Boolean)),
-        ])
+    if (!filtered.length) {
+      listWrap.appendChild(emptyState('No projects found.'));
+      return;
+    }
+
+    ['active', 'on-hold', 'completed'].forEach((status) => {
+      // Projects with no open next action (or waiting-on item) — the ones
+      // most needing attention — float to the top of their status group.
+      const group = filtered.filter((p) => p.status === status).sort((a, b) => openActionCount(a) - openActionCount(b));
+      if (!group.length) return;
+      // Completed projects are collapsed by default — done work shouldn't
+      // compete for attention with what's still active, but stays one tap
+      // away, same pattern as Next Actions' Completed section.
+      const isCompletedGroup = status === 'completed';
+      // Anything completed over a month ago gets auto-purged (see
+      // js/cleanup.js), so this heading is never stale — say so rather than
+      // just "Completed", which would imply this is the full history.
+      const groupLabel = isCompletedGroup ? 'Completed in the last month' : statusLabel(status);
+      const list = el('div', { class: 'list' + (isCompletedGroup ? ' collapsed' : '') });
+      listWrap.appendChild(
+        isCompletedGroup
+          ? el('h3', {
+              class: 'group-heading group-heading-collapsible collapsed',
+              onclick: (e) => {
+                e.currentTarget.classList.toggle('collapsed');
+                list.classList.toggle('collapsed');
+              },
+            }, [
+              el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+              el('span', {}, `${groupLabel} (${group.length})`),
+            ])
+          : el('h3', { class: 'group-heading' }, `${groupLabel} (${group.length})`)
       );
+      group.forEach((p) => {
+        const linked = items.filter((i) => i.projectId === p.id && !i.completed && (i.type === 'next-action' || i.type === 'waiting-for'));
+        const stalled = status === 'active' && linked.length === 0;
+        // Stop the row's own onclick (navigate to detail) from firing when a
+        // quick-action button inside it is clicked.
+        const stopNav = (fn) => (e) => { e.stopPropagation(); fn(); };
+        list.appendChild(
+          el('div', { class: 'item-row project-row' + (stalled ? ' stalled' : ''), onclick: () => navigate(`/projects/${p.id}`) }, [
+            el('div', { class: 'item-main' }, [
+              el('div', { class: 'item-title' }, [
+                p.title,
+                stalled ? el('span', { class: 'stalled-badge', html: iconSvg('alertTriangle', 13) + ' stalled' }) : null,
+              ].filter(Boolean)),
+              p.outcome ? el('div', { class: 'item-notes' }, p.outcome) : null,
+              el('div', { class: 'item-meta' }, `${linked.length} open action${linked.length === 1 ? '' : 's'}`),
+            ].filter(Boolean)),
+            el('div', { class: 'item-actions' }, [
+              status !== 'completed'
+                ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: stopNav(() => sendProjectToSomeday(p, () => refresh(renderProjects))) })
+                : null,
+            ].filter(Boolean)),
+          ])
+        );
+      });
+      listWrap.appendChild(list);
     });
-    r.appendChild(list);
-  });
+  }
+
+  searchBox.addEventListener('input', () => draw(searchBox.value));
+  draw();
 }
 
 // Parks an active/on-hold project on Someday/Maybe: it keeps all its Next
@@ -819,8 +839,10 @@ export async function renderSomeday() {
   // Which sections are collapsed — kept outside draw() so it survives
   // re-draws (e.g. after Reactivate/Activate/Delete), same pattern as the
   // Reference page's category collapse and Next Actions' Completed section.
-  const collapsed = new Set();
+  // Starts with every section collapsed so opening the page shows just the
+  // section list, not every idea and parked project at once.
   const UNSORTED_KEY = '__unsorted__';
+  const collapsed = new Set([...sections.map((s) => s.id), UNSORTED_KEY]);
 
   function draw() {
     listWrap.innerHTML = '';
@@ -1079,9 +1101,9 @@ export async function renderReference() {
   r.appendChild(listWrap);
 
   // Which categories are collapsed — kept outside draw() so it survives
-  // re-draws while searching, and starts empty (everything expanded, same
-  // as before this was added).
-  const collapsed = new Set();
+  // re-draws while searching. Starts with every category collapsed so
+  // opening Reference shows just the topic list, not every item at once.
+  const collapsed = new Set(items.map((i) => i.category || 'Uncategorized'));
 
   function draw(filterText = '') {
     listWrap.innerHTML = '';
