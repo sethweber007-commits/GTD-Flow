@@ -329,14 +329,6 @@ body {
   padding: 5px 8px 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
 }
 .chip-remove { background: none; border: none; cursor: pointer; font-size: 15px; color: inherit; line-height: 1; }
-.context-jump-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.context-jump-btn {
-  display: inline-flex; align-items: center;
-  background: var(--primary-light); color: var(--primary-dark);
-  border: none; cursor: pointer; font-family: inherit;
-  padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
-}
-.context-jump-btn:hover { background: var(--primary); color: #fff; }
 .inline-form { display: flex; gap: 8px; }
 .inline-form input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
 
@@ -400,7 +392,6 @@ select.clarify-input { background: var(--surface); }
 .project-subsection-heading { justify-content: space-between; margin-top: 26px; }
 .project-subsection-heading h3 { margin: 0; font-size: 14.5px; display: flex; align-items: center; gap: 7px; }
 .project-subsection-heading .icon { color: var(--primary); }
-.context-subheading { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 12px 0 6px 2px; }
 
 /* Accordion (Horizons of Focus) */
 .accordion-section {

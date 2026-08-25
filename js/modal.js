@@ -126,7 +126,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     field('Title', el('input', { type: 'text', name: 'title', required: true, value: data.title || '', placeholder: 'What is it?' })),
 
     type === 'next-action' || type === 'waiting-for'
-      ? field('Context', contextFieldEl(contextSuggestions, data.context))
+      ? field(type === 'next-action' ? 'Context (required)' : 'Context', contextFieldEl(contextSuggestions, data.context, type === 'next-action'))
       : null,
 
     type === 'someday'
@@ -391,9 +391,9 @@ async function distinctContexts() {
 // Free-text context field with a <datalist> of previously-used contexts as
 // suggestions — typing a new one (e.g. "@Calls") just works, no separate
 // "manage contexts" list to keep in sync.
-function contextFieldEl(suggestions, value) {
+function contextFieldEl(suggestions, value, required = false) {
   const listId = 'context-suggestions-' + uid();
-  const input = el('input', { type: 'text', name: 'context', list: listId, value: value || '', placeholder: 'e.g. @Calls, @Computer, @Errands…' });
+  const input = el('input', { type: 'text', name: 'context', list: listId, value: value || '', required, placeholder: 'e.g. @Calls, @Computer, @Errands…' });
   const datalist = el('datalist', { id: listId }, suggestions.map((c) => el('option', { value: c })));
   return el('div', {}, [input, datalist]);
 }

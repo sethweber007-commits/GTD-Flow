@@ -364,9 +364,7 @@ export async function renderNextActions() {
     return;
   }
 
-  // Groups by context, ordered alphabetically with "No context" always
-  // last — shared by the jump-nav buttons below and the section rendering,
-  // so they always agree on exactly which contexts currently have actions.
+  // Groups by context, ordered alphabetically with "No context" always last.
   function groupByContext(groupItems) {
     const byContext = new Map();
     groupItems.forEach((i) => {
@@ -379,37 +377,40 @@ export async function renderNextActions() {
     return { byContext, order };
   }
 
-  function contextAnchorId(ctx) {
-    return 'ctx-' + ctx.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  }
+  const listWrap = el('div', { id: 'next-actions-list' });
+  r.appendChild(listWrap);
 
-  const { byContext, order: contextOrder } = groupByContext(items);
-  if (contextOrder.length) {
-    r.appendChild(
-      el(
-        'div',
-        { class: 'context-jump-nav' },
-        contextOrder.map((ctx) =>
-          el('button', {
-            type: 'button',
-            class: 'context-jump-btn',
-            onclick: () => document.getElementById(contextAnchorId(ctx))?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-          }, `${ctx} (${byContext.get(ctx).length})`)
-        )
-      )
-    );
-  }
+  const COMPLETED_KEY = '__completed__';
+  // Which context groups are collapsed — kept outside draw() so it survives
+  // re-draws (e.g. after completing/editing/deleting an item), same pattern
+  // as the Someday page's section collapse. Starts with every context (plus
+  // Completed) collapsed so opening the page shows just the context list,
+  // not every action at once.
+  const { order: contextOrder } = groupByContext(items);
+  const collapsed = new Set([...contextOrder, COMPLETED_KEY]);
 
-  function renderContextGroups(container, groupItems) {
-    const { byContext, order } = groupByContext(groupItems);
+  function draw() {
+    listWrap.innerHTML = '';
+
+    const { byContext, order } = groupByContext(items);
     order.forEach((ctx) => {
       const group = byContext.get(ctx);
       if (!group || !group.length) return;
       // Important actions float to the top of their context group so
       // they're easy to spot at a glance, without leaving their context.
       group.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
-      container.appendChild(el('div', { class: 'context-subheading', id: contextAnchorId(ctx) }, `${ctx} (${group.length})`));
-      const list = el('div', { class: 'list' });
+
+      const isCollapsed = collapsed.has(ctx);
+      const list = el('div', { class: 'list' + (isCollapsed ? ' collapsed' : '') });
+      listWrap.appendChild(
+        el('h3', {
+          class: 'group-heading group-heading-collapsible' + (isCollapsed ? ' collapsed' : ''),
+          onclick: () => { if (collapsed.has(ctx)) collapsed.delete(ctx); else collapsed.add(ctx); draw(); },
+        }, [
+          el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+          el('span', {}, `${ctx} (${group.length})`),
+        ])
+      );
       group.forEach((item) => {
         const proj = projects.find((p) => p.id === item.projectId);
         list.appendChild(
@@ -427,46 +428,44 @@ export async function renderNextActions() {
           })
         );
       });
-      container.appendChild(list);
+      listWrap.appendChild(list);
     });
-  }
 
-  renderContextGroups(r, items);
-
-  if (completedItems.length) {
-    // Collapsed by default — done work shouldn't compete for attention with
-    // what's still open, but it should still be one tap away, with a way to
-    // undo a completion straight from here (unchecking its checkbox).
-    const completedList = el('div', { class: 'list collapsed' });
-    completedItems.forEach((item) => {
-      const proj = projects.find((p) => p.id === item.projectId);
-      completedList.appendChild(
-        itemRow(item, {
-          meta: item.completedAt ? `Completed ${formatDate(item.completedAt)}` : '',
-          projectLabel: proj ? proj.title : null,
-          onComplete: async (it) => {
-            await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
-            refresh(renderNextActions);
-          },
-          onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
-          onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
-        })
+    if (completedItems.length) {
+      // Done work shouldn't compete for attention with what's still open,
+      // but it should still be one tap away, with a way to undo a
+      // completion straight from here (unchecking its checkbox).
+      const isCollapsed = collapsed.has(COMPLETED_KEY);
+      const completedList = el('div', { class: 'list' + (isCollapsed ? ' collapsed' : '') });
+      completedItems.forEach((item) => {
+        const proj = projects.find((p) => p.id === item.projectId);
+        completedList.appendChild(
+          itemRow(item, {
+            meta: item.completedAt ? `Completed ${formatDate(item.completedAt)}` : '',
+            projectLabel: proj ? proj.title : null,
+            onComplete: async (it) => {
+              await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
+              refresh(renderNextActions);
+            },
+            onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
+            onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
+          })
+        );
+      });
+      listWrap.appendChild(
+        el('h3', {
+          class: 'group-heading group-heading-collapsible' + (isCollapsed ? ' collapsed' : ''),
+          onclick: () => { if (collapsed.has(COMPLETED_KEY)) collapsed.delete(COMPLETED_KEY); else collapsed.add(COMPLETED_KEY); draw(); },
+        }, [
+          el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+          el('span', {}, `Completed in the last month (${completedItems.length})`),
+        ])
       );
-    });
-    r.appendChild(
-      el('h3', {
-        class: 'group-heading group-heading-collapsible collapsed',
-        onclick: (e) => {
-          e.currentTarget.classList.toggle('collapsed');
-          completedList.classList.toggle('collapsed');
-        },
-      }, [
-        el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
-        el('span', {}, `Completed in the last month (${completedItems.length})`),
-      ])
-    );
-    r.appendChild(completedList);
+      listWrap.appendChild(completedList);
+    }
   }
+
+  draw();
 }
 
 // -------------------------------------------------------------- PROJECTS --
