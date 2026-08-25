@@ -93,8 +93,10 @@ function paintBadge(id, count) {
 
 // Sidebar counters: Inbox counts everything waiting to be clarified; Next
 // Actions and Waiting For count what's actually open on those lists (same
-// filters those views use); Projects counts active (in-progress) projects —
-// on-hold/someday/completed projects aren't part of the current working set;
+// filters those views use); Projects counts active projects that are
+// stalled — no open next action or waiting-on item — same "stalled" flag
+// the Projects page badges onto each row, so the sidebar surfaces exactly
+// what needs a next action added;
 // Calendar counts items still waiting to be scheduled (same "pending" set
 // renderSchedule shows above the fold) — standalone calendar items plus every
 // open Next Action, both not yet checked off as scheduled.
@@ -109,7 +111,9 @@ async function updateNavBadges() {
   paintBadge('inbox-badge', inboxItems.length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed && i.activated !== false).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
-  paintBadge('projects-badge', projects.filter((p) => p.status === 'active').length);
+  const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);
+  const stalledProjects = projects.filter((p) => p.status === 'active' && !openProjectItems.some((i) => i.projectId === p.id));
+  paintBadge('projects-badge', stalledProjects.length);
   const pendingCalendarItems = calendarItems.filter((i) => !i.scheduled).length;
   const pendingFlaggedActions = allActions.filter((i) => !i.completed && !i.scheduled).length;
   paintBadge('calendar-badge', pendingCalendarItems + pendingFlaggedActions);
