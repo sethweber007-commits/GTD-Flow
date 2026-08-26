@@ -18,6 +18,13 @@ function root() {
 // context list, not every action at once.
 let nextActionsCollapsed;
 
+// Same problem, same fix, for the Someday/Maybe page's section groups:
+// refresh(renderSomeday) after Reactivate/Activate/Delete/etc. reruns the
+// whole function, so this has to live at module scope to survive it.
+// Undefined until the page's first render, then seeded to "everything
+// collapsed".
+let somedayCollapsed;
+
 function pageHeader(title, subtitle, actions = []) {
   return el('div', { class: 'page-header' }, [
     el('div', {}, [el('h1', {}, title), subtitle ? el('p', { class: 'subtitle' }, subtitle) : null].filter(Boolean)),
@@ -844,13 +851,18 @@ export async function renderSomeday() {
   const listWrap = el('div', { id: 'someday-list' });
   r.appendChild(listWrap);
 
-  // Which sections are collapsed — kept outside draw() so it survives
-  // re-draws (e.g. after Reactivate/Activate/Delete), same pattern as the
-  // Reference page's category collapse and Next Actions' Completed section.
-  // Starts with every section collapsed so opening the page shows just the
-  // section list, not every idea and parked project at once.
+  // Which sections are collapsed. See somedayCollapsed's declaration above
+  // for why this lives at module scope instead of being a plain local Set —
+  // refresh(renderSomeday) after Reactivate/Activate/Delete reruns this
+  // whole function, and a local Set would be recreated and lose the user's
+  // open/closed choices. Starts with every section collapsed so opening the
+  // page shows just the section list, not every idea and parked project at
+  // once.
   const UNSORTED_KEY = '__unsorted__';
-  const collapsed = new Set([...sections.map((s) => s.id), UNSORTED_KEY]);
+  if (!somedayCollapsed) {
+    somedayCollapsed = new Set([...sections.map((s) => s.id), UNSORTED_KEY]);
+  }
+  const collapsed = somedayCollapsed;
 
   function draw() {
     listWrap.innerHTML = '';
