@@ -9,6 +9,15 @@ function root() {
   return document.getElementById('view-root');
 }
 
+// Which Next Actions context groups (and the Completed group) are collapsed.
+// Kept at module scope, not just outside draw(), because completing/editing/
+// deleting an item calls refresh(renderNextActions), which reruns the whole
+// function — a variable declared inside it would be recreated and lose the
+// user's open/closed choices. Undefined until the page's first render, then
+// seeded to "everything collapsed" so opening the page shows just the
+// context list, not every action at once.
+let nextActionsCollapsed;
+
 function pageHeader(title, subtitle, actions = []) {
   return el('div', { class: 'page-header' }, [
     el('div', {}, [el('h1', {}, title), subtitle ? el('p', { class: 'subtitle' }, subtitle) : null].filter(Boolean)),
@@ -381,13 +390,13 @@ export async function renderNextActions() {
   r.appendChild(listWrap);
 
   const COMPLETED_KEY = '__completed__';
-  // Which context groups are collapsed — kept outside draw() so it survives
-  // re-draws (e.g. after completing/editing/deleting an item), same pattern
-  // as the Someday page's section collapse. Starts with every context (plus
-  // Completed) collapsed so opening the page shows just the context list,
-  // not every action at once.
-  const { order: contextOrder } = groupByContext(items);
-  const collapsed = new Set([...contextOrder, COMPLETED_KEY]);
+  // See nextActionsCollapsed's declaration above for why this lives at
+  // module scope instead of being a plain local Set.
+  if (!nextActionsCollapsed) {
+    const { order: contextOrder } = groupByContext(items);
+    nextActionsCollapsed = new Set([...contextOrder, COMPLETED_KEY]);
+  }
+  const collapsed = nextActionsCollapsed;
 
   function draw() {
     listWrap.innerHTML = '';
