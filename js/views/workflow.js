@@ -608,10 +608,10 @@ async function reactivateProject(project, onDone) {
 // groups on the Projects page. completedAt records when this happened (as
 // opposed to updatedAt, which a later unrelated edit would bump) — cleanup.js
 // uses it to auto-purge projects completed over a month ago.
-async function completeProject(project, onDone) {
+async function completeProject(project) {
   await DB.put('projects', { ...project, status: 'completed', completedAt: new Date().toISOString() });
   toast('Project marked complete');
-  onDone();
+  navigate('/projects');
 }
 
 export async function renderProjectDetail(id) {
@@ -631,7 +631,7 @@ export async function renderProjectDetail(id) {
         ? el('button', { class: 'btn btn-ghost', onclick: () => sendProjectToSomeday(project, refreshMe) }, iconLabel('moon', 'Send to Someday/Maybe', 14))
         : null,
       project.status !== 'someday' && project.status !== 'completed'
-        ? el('button', { class: 'btn btn-ghost', onclick: () => completeProject(project, refreshMe) }, iconLabel('checkCircle', 'Mark complete', 14))
+        ? el('button', { class: 'btn btn-ghost', onclick: () => completeProject(project) }, iconLabel('checkCircle', 'Mark complete', 14))
         : null,
       project.status === 'someday' || project.status === 'completed'
         ? el('button', { class: 'btn btn-ghost', onclick: () => reactivateProject(project, refreshMe) }, iconLabel('checkCircle', 'Reactivate', 14))
