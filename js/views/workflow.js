@@ -639,7 +639,11 @@ export async function renderProjectDetail(id) {
       el('button', { class: 'btn btn-ghost', onclick: () => openProjectForm({ project, onSaved: refreshMe }) }, iconLabel('edit', 'Edit', 14)),
     ].filter(Boolean))
   );
-  r.appendChild(el('a', { href: '#/projects', class: 'back-link' }, '← All projects'));
+  r.appendChild(
+    project.status === 'someday'
+      ? el('a', { href: '#/someday', class: 'back-link' }, '← Someday/Maybe')
+      : el('a', { href: '#/projects', class: 'back-link' }, '← All projects')
+  );
   r.appendChild(el('p', { class: 'badge' }, statusLabel(project.status)));
   if (project.notes) r.appendChild(el('p', { class: 'item-notes' }, project.notes));
 
@@ -716,7 +720,10 @@ export async function renderProjectDetail(id) {
     if (await confirmModal(`Delete project "${project.title}"? Linked actions will remain but lose their project link.`)) {
       for (const it of items) await DB.put('items', { ...it, projectId: null });
       await DB.remove('projects', project.id);
-      navigate('/projects');
+      // Parked (someday-status) projects never show on the Projects page —
+      // they live on Someday/Maybe — so send the user back to wherever this
+      // project actually lived instead of always to Projects.
+      navigate(project.status === 'someday' ? '/someday' : '/projects');
     }
   } }, iconLabel('trash', 'Delete project', 14)));
 }
