@@ -40,10 +40,9 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onActivate, showScheduled, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onActivate, meta, projectLabel } = {}) {
   const needsActivation = item.activated === false;
-  const unscheduled = showScheduled && !item.scheduled;
-  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') + (unscheduled ? ' unscheduled' : '') }, [
+  return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
       : null,
@@ -57,15 +56,6 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
-      showScheduled
-        ? el('label', {
-            class: 'scheduled-check',
-            title: item.scheduled ? 'Scheduled — checked off on the Calendar tab' : 'Not yet scheduled — check it off on the Calendar tab',
-          }, [
-            el('input', { type: 'checkbox', checked: item.scheduled || false, disabled: true }),
-            ' Scheduled?',
-          ])
-        : null,
       onActivate && needsActivation
         ? el('button', {
             class: 'icon-btn activate-btn',
@@ -436,7 +426,6 @@ export async function renderNextActions() {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
               refresh(renderNextActions);
             },
-            showScheduled: true,
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
@@ -940,13 +929,11 @@ export async function renderSomeday() {
 // This app never talks to the Google Calendar API — there's no OAuth
 // connection and nothing is pushed anywhere automatically. You add the
 // event to Google Calendar yourself, then check it off here as your record
-// that it's been scheduled. Two kinds of item appear: standalone
-// type:'calendar' items (created here, or from Clarify's "Schedule" step)
-// and every open Next Action — because a Next Action is literally the same
-// record shown there, checking it off here is just one DB.put, same as
-// everywhere else in the app. The Next Actions list shows the same
-// "Scheduled?" state read-only (see itemRow's showScheduled) and highlights
-// unscheduled ones in red, but this is the only place it can be checked off.
+// that it's been scheduled. Only standalone type:'calendar' items appear
+// here (created from this page, or from Clarify's "Schedule" step) — Next
+// Actions are a separate list and never show up here automatically; put one
+// on the calendar yourself by adding it here if you want a reminder to
+// schedule it.
 
 function scheduleToMarkdown(items, somedayTickled) {
   const pending = items.filter((i) => !i.scheduled);
@@ -966,8 +953,7 @@ function scheduleToMarkdown(items, somedayTickled) {
 }
 
 function scheduleRow(item, projects) {
-  const isAction = item.type === 'next-action';
-  const proj = isAction ? projects.find((p) => p.id === item.projectId) : null;
+  const proj = projects.find((p) => p.id === item.projectId);
   return el('div', { class: 'item-row' + (item.scheduled ? ' completed' : '') }, [
     el('input', {
       type: 'checkbox',
@@ -984,22 +970,18 @@ function scheduleRow(item, projects) {
       item.notes ? el('div', { class: 'item-notes' }, item.notes) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
-      isAction
-        ? el('button', { class: 'icon-btn', title: 'Open in Next Actions', html: iconSvg('checkCircle', 16), onclick: () => navigate('/next-actions') })
-        : el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'calendar', onSaved: () => refresh(renderSchedule) }) }),
-      !isAction
-        ? el('button', {
-            class: 'icon-btn',
-            title: 'Delete',
-            html: iconSvg('trash', 16),
-            onclick: async () => {
-              if (await confirmModal(`Delete "${item.title}"?`)) {
-                await DB.remove('items', item.id);
-                refresh(renderSchedule);
-              }
-            },
-          })
-        : null,
+      el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'calendar', onSaved: () => refresh(renderSchedule) }) }),
+      el('button', {
+        class: 'icon-btn',
+        title: 'Delete',
+        html: iconSvg('trash', 16),
+        onclick: async () => {
+          if (await confirmModal(`Delete "${item.title}"?`)) {
+            await DB.remove('items', item.id);
+            refresh(renderSchedule);
+          }
+        },
+      }),
     ]),
   ]);
 }
@@ -1039,11 +1021,10 @@ export async function renderSchedule() {
   const allItems = await DB.getAll('items');
   const projects = await DB.getAll('projects');
 
-  // Standalone schedule items (created here or via Clarify), plus every open
-  // Next Action — all of them live on this checklist by default now.
-  const items = allItems.filter(
-    (i) => i.type === 'calendar' || (i.type === 'next-action' && !i.completed)
-  );
+  // Only standalone type:'calendar' items live on this checklist — Next
+  // Actions no longer show up here automatically (see the CALENDAR comment
+  // above).
+  const items = allItems.filter((i) => i.type === 'calendar');
   const pending = items.filter((i) => !i.scheduled).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const scheduled = items
     .filter((i) => i.scheduled)

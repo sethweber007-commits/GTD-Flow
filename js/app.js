@@ -97,9 +97,9 @@ function paintBadge(id, count) {
 // stalled — no open next action or waiting-on item — same "stalled" flag
 // the Projects page badges onto each row, so the sidebar surfaces exactly
 // what needs a next action added;
-// Calendar counts items still waiting to be scheduled (same "pending" set
-// renderSchedule shows above the fold) — standalone calendar items plus every
-// open Next Action, both not yet checked off as scheduled.
+// Calendar counts standalone calendar items still waiting to be scheduled
+// (same "pending" set renderSchedule shows above the fold) — Next Actions
+// no longer factor in, since they don't show up on the Calendar page.
 async function updateNavBadges() {
   const [inboxItems, allActions, waitingItems, projects, calendarItems] = await Promise.all([
     DB.getByIndex('items', 'type', 'inbox'),
@@ -114,9 +114,7 @@ async function updateNavBadges() {
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);
   const stalledProjects = projects.filter((p) => p.status === 'active' && !openProjectItems.some((i) => i.projectId === p.id));
   paintBadge('projects-badge', stalledProjects.length);
-  const pendingCalendarItems = calendarItems.filter((i) => !i.scheduled).length;
-  const pendingFlaggedActions = allActions.filter((i) => !i.completed && !i.scheduled).length;
-  paintBadge('calendar-badge', pendingCalendarItems + pendingFlaggedActions);
+  paintBadge('calendar-badge', calendarItems.filter((i) => !i.scheduled).length);
 }
 
 let deferredInstallPrompt = null;
