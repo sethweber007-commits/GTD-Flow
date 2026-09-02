@@ -387,8 +387,12 @@ export async function renderNextActions() {
   r.appendChild(listWrap);
 
   const COMPLETED_KEY = '__completed__';
+  const IMPORTANT_KEY = '__important__';
   // See nextActionsCollapsed's declaration above for why this lives at
-  // module scope instead of being a plain local Set.
+  // module scope instead of being a plain local Set. IMPORTANT_KEY is
+  // deliberately left out of the initial set — unlike context groups and
+  // Completed, the Important section starts expanded since surfacing
+  // important actions immediately is the point of the feature.
   if (!nextActionsCollapsed) {
     const { order: contextOrder } = groupByContext(items);
     nextActionsCollapsed = new Set([...contextOrder, COMPLETED_KEY]);
@@ -397,6 +401,46 @@ export async function renderNextActions() {
 
   function draw() {
     listWrap.innerHTML = '';
+
+    // Important actions get their own group at the very top of the page,
+    // above any context, so they're visible without hunting through every
+    // context group. They also stay in their own context group below (see
+    // the sort in the loop further down) — this section doesn't remove them
+    // from anywhere, it just adds a second, higher-visibility place to see
+    // them.
+    const importantItems = items.filter((i) => i.important).sort((a, b) => a.title.localeCompare(b.title));
+    if (importantItems.length) {
+      const isCollapsed = collapsed.has(IMPORTANT_KEY);
+      const importantList = el('div', { class: 'list' + (isCollapsed ? ' collapsed' : '') });
+      listWrap.appendChild(
+        el('h3', {
+          class: 'group-heading group-heading-collapsible important-group-heading' + (isCollapsed ? ' collapsed' : ''),
+          onclick: () => { if (collapsed.has(IMPORTANT_KEY)) collapsed.delete(IMPORTANT_KEY); else collapsed.add(IMPORTANT_KEY); draw(); },
+        }, [
+          el('span', { class: 'group-heading-chevron', html: iconSvg('chevronDown', 16) }),
+          el('span', { html: iconSvg('star', 15, 'icon-filled') }),
+          el('span', {}, ` Important (${importantItems.length})`),
+        ])
+      );
+      importantItems.forEach((item) => {
+        const proj = projects.find((p) => p.id === item.projectId);
+        importantList.appendChild(
+          itemRow(item, {
+            meta: item.context || null,
+            projectLabel: proj ? proj.title : null,
+            onComplete: async (it) => {
+              await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
+              refresh(renderNextActions);
+            },
+            onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
+            onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
+            onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
+            onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
+          })
+        );
+      });
+      listWrap.appendChild(importantList);
+    }
 
     const { byContext, order } = groupByContext(items);
     order.forEach((ctx) => {
