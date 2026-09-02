@@ -233,17 +233,11 @@ export async function renderClarify() {
       ]));
     } else if (state.step === 'new-item-menu') {
       card.appendChild(question('What kind of new item?', [
-        [['checkCircle', 'Action'], () => { state.step = 'new-action-two-minute'; renderStep(); }],
+        [['checkCircle', 'Action'], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true)],
         [['folder', 'Project'], () => { state.step = 'new-project'; renderStep(); }],
         [['clock', 'Waiting on'], () => { state.step = 'new-waiting'; renderStep(); }],
       ]));
       card.appendChild(backBtn(() => { state.step = 'menu'; renderStep(); }));
-    } else if (state.step === 'new-action-two-minute') {
-      card.appendChild(question('Will it take less than 2 minutes?', [
-        ['Yes — do it now', () => finish(async () => DB.put('items', { ...current, type: 'next-action', completed: true, completedAt: new Date().toISOString() }))],
-        ['No — takes longer', () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true)],
-      ]));
-      card.appendChild(backBtn(() => { state.step = 'new-item-menu'; renderStep(); }));
     } else if (state.step === 'new-project') {
       card.appendChild(el('p', {}, `This becomes a new project called "${current.title}". Add its first next action now, or do that later from Projects.`));
       card.appendChild(el('div', { class: 'clarify-options' }, [
