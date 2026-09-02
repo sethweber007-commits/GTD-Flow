@@ -237,7 +237,6 @@ body {
 .group-heading-collapsible:hover { color: var(--ink); }
 .important-group-heading { color: var(--warn); }
 .important-group-heading:hover { color: var(--warn); }
-.important-group-heading .icon-filled { color: var(--warn); }
 .group-heading-chevron { display: inline-flex; transition: transform 0.15s ease; flex-shrink: 0; }
 .group-heading-collapsible.collapsed .group-heading-chevron { transform: rotate(-90deg); }
 .list.collapsed { display: none; }
