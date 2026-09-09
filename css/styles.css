@@ -445,6 +445,11 @@ select.clarify-input { background: var(--surface); }
   color: var(--ink); font-weight: 400; font-size: 14.5px; resize: vertical;
 }
 .field input:focus, .field textarea:focus, .field select:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+/* Checkbox fields (e.g. "Mark as important" on the Next Action form) read
+   as a single row — checkbox beside its label — rather than the stacked
+   label-above-input layout the rest of .field uses. */
+.field.field-checkbox { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; color: var(--ink); }
+.field.field-checkbox input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--primary); }
 /* Auto-focused fields (e.g. the category/section field after Reference or
    Someday/Maybe in Clarify) get a visible glow on top of the normal focus
    ring — a real .focus() call can end up looking inert on some mobile

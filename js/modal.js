@@ -118,6 +118,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
   const sections = type === 'someday' ? await DB.getByIndex('sections', 'view', type) : [];
   const contextSuggestions = ['next-action', 'waiting-for'].includes(type) ? await distinctContexts() : [];
+  const categorySuggestions = type === 'reference' ? await distinctCategories() : [];
   const isEdit = !!item;
   const data = item || { type, title: '', notes: '', ...defaults };
 
@@ -127,6 +128,17 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
 
     type === 'next-action' || type === 'waiting-for'
       ? field(type === 'next-action' ? 'Context (required)' : 'Context', contextFieldEl(contextSuggestions, data.context, type === 'next-action'))
+      : null,
+
+    // Available for every Next Action — including a project's first
+    // action, created straight from Clarify or a project's own "Add
+    // action" button — so marking it important doesn't need a second
+    // trip back to the star icon after saving.
+    type === 'next-action'
+      ? el('label', { class: 'field field-checkbox' }, [
+          el('input', { type: 'checkbox', name: 'important', checked: data.important || false }),
+          el('span', {}, 'Mark as important'),
+        ])
       : null,
 
     type === 'someday'
@@ -141,7 +153,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
 
     type === 'someday' ? field('Revisit on (tickler, optional)', el('input', { type: 'date', name: 'tickleDate', value: (data.tickleDate || '').slice(0, 10) })) : null,
 
-    type === 'reference' ? field('Category / topic', el('input', { type: 'text', name: 'category', value: data.category || '', placeholder: 'e.g. Taxes, Recipes, Travel' })) : null,
+    type === 'reference' ? field('Category / topic', categoryFieldEl(categorySuggestions, data.category)) : null,
 
     field('Notes', el('textarea', { name: 'notes', rows: 3, placeholder: 'Details, links, context…' }, data.notes || '')),
 
@@ -181,6 +193,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     if (fd.has('waitingOn')) record.waitingOn = fd.get('waitingOn') || '';
     if (fd.has('tickleDate')) record.tickleDate = fd.get('tickleDate') ? new Date(fd.get('tickleDate')).toISOString() : null;
     if (fd.has('category')) record.category = fd.get('category') || '';
+    if (record.type === 'next-action') record.important = fd.get('important') === 'on';
 
     // Actions linked to a project are gated off the global Next Actions list
     // until explicitly "Activated" from the project page — unless the
@@ -394,6 +407,26 @@ async function distinctContexts() {
 function contextFieldEl(suggestions, value, required = false) {
   const listId = 'context-suggestions-' + uid();
   const input = el('input', { type: 'text', name: 'context', list: listId, value: value || '', required, placeholder: 'e.g. @Calls, @Computer, @Errands…' });
+  const datalist = el('datalist', { id: listId }, suggestions.map((c) => el('option', { value: c })));
+  return el('div', {}, [input, datalist]);
+}
+
+// Distinct reference categories already in use, for the Category field's
+// suggestion list — same idea as distinctContexts, no separate managed list.
+async function distinctCategories() {
+  const items = await DB.getByIndex('items', 'type', 'reference');
+  const set = new Set();
+  items.forEach((i) => { if (i.category) set.add(i.category); });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// Free-text category field with a <datalist> of existing reference
+// categories as suggestions, so filing something under a category you've
+// already used shows it while you type instead of relying on getting the
+// spelling to match exactly.
+function categoryFieldEl(suggestions, value) {
+  const listId = 'category-suggestions-' + uid();
+  const input = el('input', { type: 'text', name: 'category', list: listId, value: value || '', placeholder: 'e.g. Taxes, Recipes, Travel' });
   const datalist = el('datalist', { id: listId }, suggestions.map((c) => el('option', { value: c })));
   return el('div', {}, [input, datalist]);
 }
