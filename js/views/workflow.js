@@ -228,7 +228,7 @@ export async function renderClarify() {
         [['plus', 'New item'], () => { state.step = 'new-item-menu'; renderStep(); }],
         [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }],
         [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true)],
-        [['star', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
+        [['moon', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
         [['calendar', 'Schedule'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
       ]));
     } else if (state.step === 'new-item-menu') {

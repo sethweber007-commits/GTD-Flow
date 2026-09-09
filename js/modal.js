@@ -1,6 +1,7 @@
 // Generic modal host + reusable item/project edit forms.
 import { DB } from './db.js';
 import { el, escapeHtml, toast, uid, projectPicker } from './utils.js';
+import { iconSvg } from './icons.js';
 
 function host() {
   return document.getElementById('modal-host');
@@ -134,12 +135,7 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     // action, created straight from Clarify or a project's own "Add
     // action" button — so marking it important doesn't need a second
     // trip back to the star icon after saving.
-    type === 'next-action'
-      ? el('label', { class: 'field field-checkbox' }, [
-          el('input', { type: 'checkbox', name: 'important', checked: data.important || false }),
-          el('span', {}, 'Mark as important'),
-        ])
-      : null,
+    type === 'next-action' ? importantToggleField(data.important || false) : null,
 
     type === 'someday'
       ? field('Category (optional)', sectionFieldEl(sections, data.sectionId))
@@ -389,6 +385,26 @@ export function confirmModal(message) {
 
 function field(labelText, inputEl) {
   return el('label', { class: 'field' }, [el('span', {}, labelText), inputEl]);
+}
+
+// A star toggle for the Next Action form's "Mark as important" field —
+// the same star icon used to toggle it from the Next Actions list. Keeps
+// a hidden checkbox named "important" so the surrounding <form>'s
+// FormData submission (see openItemForm's submit handler) needs no changes.
+function importantToggleField(checked) {
+  const input = el('input', { type: 'checkbox', name: 'important', checked, hidden: true });
+  const icon = el('span', { class: 'important-toggle-icon', html: iconSvg('star', 18, checked ? 'icon-filled' : '') });
+  const row = el('button', { type: 'button', class: 'field field-checkbox important-toggle' + (checked ? ' important-active' : '') }, [
+    icon,
+    el('span', {}, 'Mark as important'),
+    input,
+  ]);
+  row.addEventListener('click', () => {
+    input.checked = !input.checked;
+    row.classList.toggle('important-active', input.checked);
+    icon.innerHTML = iconSvg('star', 18, input.checked ? 'icon-filled' : '');
+  });
+  return row;
 }
 
 // Distinct context strings already used on any item, for the Context

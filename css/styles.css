@@ -445,11 +445,18 @@ select.clarify-input { background: var(--surface); }
   color: var(--ink); font-weight: 400; font-size: 14.5px; resize: vertical;
 }
 .field input:focus, .field textarea:focus, .field select:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
-/* Checkbox fields (e.g. "Mark as important" on the Next Action form) read
-   as a single row — checkbox beside its label — rather than the stacked
-   label-above-input layout the rest of .field uses. */
+/* Checkbox/toggle fields (e.g. "Mark as important" on the Next Action
+   form) read as a single row — control beside its label — rather than the
+   stacked label-above-input layout the rest of .field uses. */
 .field.field-checkbox { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; color: var(--ink); }
 .field.field-checkbox input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--primary); }
+/* "Mark as important" is a star toggle, not a checkbox — same star used to
+   toggle importance from the Next Actions list — built from a plain
+   <button> so it can sit inside the form without submitting it. */
+.field.important-toggle { width: 100%; background: none; border: none; padding: 0; cursor: pointer; font: inherit; text-align: left; color: var(--muted); }
+.field.important-toggle .important-toggle-icon { display: inline-flex; color: var(--muted); }
+.field.important-toggle.important-active { color: var(--ink); }
+.field.important-toggle.important-active .important-toggle-icon { color: var(--warn); }
 /* Auto-focused fields (e.g. the category/section field after Reference or
    Someday/Maybe in Clarify) get a visible glow on top of the normal focus
    ring — a real .focus() call can end up looking inert on some mobile
