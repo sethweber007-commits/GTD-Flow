@@ -285,8 +285,6 @@ body {
 .icon-btn.danger:hover { background: var(--danger-light); color: var(--danger); }
 .icon-btn.important-active { color: var(--warn); }
 .icon-btn.important-active:hover { background: var(--warn-light); }
-.icon-btn.activate-btn { color: var(--primary); }
-.icon-btn.activate-btn:hover { background: var(--primary-light); }
 .icon-filled { fill: currentColor; }
 
 .date-tag { padding: 2px 8px; border-radius: 999px; background: var(--bg); }

@@ -1,6 +1,6 @@
 import { DB } from '../db.js';
 import { el, toast, formatDate, isPast, isToday, downloadTextFile, mdEscape, projectPicker } from '../utils.js';
-import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection, projectHasActiveAction } from '../modal.js';
+import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection } from '../modal.js';
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
 import { iconSvg } from '../icons.js';
@@ -40,8 +40,7 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onActivate, meta, projectLabel } = {}) {
-  const needsActivation = item.activated === false;
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, meta, projectLabel } = {}) {
   return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
@@ -56,14 +55,6 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
-      onActivate && needsActivation
-        ? el('button', {
-            class: 'icon-btn activate-btn',
-            title: 'Activate — show this on the Next Actions list',
-            html: iconSvg('checkCircle', 16),
-            onclick: () => onActivate(item),
-          })
-        : null,
       onImportant
         ? el('button', {
             class: 'icon-btn' + (item.important ? ' important-active' : ''),
@@ -94,15 +85,6 @@ async function sendItemToSomeday(item, onDone) {
 // so they're easy to spot at a glance.
 async function toggleImportant(item, onDone) {
   await DB.put('items', { ...item, important: !item.important });
-  onDone();
-}
-
-// Moves a project-linked action from "just shows in the project" onto the
-// global Next Actions list — see the projectId/activated handling in
-// modal.js's openItemForm for how it gets set to false in the first place.
-async function activateAction(item, onDone) {
-  await DB.put('items', { ...item, activated: true });
-  toast('Activated — now on Next Actions');
   onDone();
 }
 
@@ -285,11 +267,7 @@ export async function renderClarify() {
 
       card.appendChild(el('div', { class: 'clarify-options' }, [
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
-          // Linked straight to a project — auto-activated onto Next Actions
-          // if the project has no other active action yet, same rule as the
-          // item form (see projectHasActiveAction in modal.js).
-          const activated = !(await projectHasActiveAction(select.value));
-          await DB.put('items', { ...current, type: 'next-action', projectId: select.value, activated });
+          await DB.put('items', { ...current, type: 'next-action', projectId: select.value });
         }, true)) }, iconLabel('checkCircle', 'Action', 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); }) }, iconLabel('clock', 'Waiting on', 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
@@ -343,10 +321,7 @@ export async function renderClarify() {
 // --------------------------------------------------------- NEXT ACTIONS ---
 export async function renderNextActions() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
-  // Actions still waiting to be "Activated" from their project page (see
-  // activated handling in modal.js/workflow.js) stay off this list — they're
-  // visible in the project's own Next Actions subsection in the meantime.
-  const items = allItems.filter((i) => !i.completed && i.activated !== false);
+  const items = allItems.filter((i) => !i.completed);
   const completedItems = allItems
     .filter((i) => i.completed)
     .sort((a, b) => new Date(b.completedAt || b.createdAt) - new Date(a.completedAt || a.createdAt));
@@ -699,13 +674,12 @@ export async function renderProjectDetail(id) {
     'Add action',
     () => openItemForm({ type: 'next-action', defaults: { projectId: id }, onSaved: refreshMe }),
     (item) => ({
-      meta: [item.context, item.activated === false ? 'Not on Next Actions yet' : null].filter(Boolean).join(' · '),
+      meta: item.context || '',
       onComplete: async (it) => {
         await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
         refreshMe();
       },
       onImportant: (it) => toggleImportant(it, refreshMe),
-      onActivate: (it) => activateAction(it, refreshMe),
       onSomeday: (it) => sendItemToSomeday(it, refreshMe),
       onEdit: (it) => openItemForm({ item: it, type: it.type, onSaved: refreshMe }),
       onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refreshMe(); } },
@@ -794,12 +768,8 @@ function somedayCard(item, onDone) {
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
       el('button', { class: 'btn btn-small', onclick: async () => {
-        // If this idea is linked to a project, it follows the same
-        // auto-activation rule as any other project-linked action — same
-        // rule as modal.js's openItemForm (see projectHasActiveAction).
-        const activated = item.projectId ? !(await projectHasActiveAction(item.projectId)) : true;
-        await DB.put('items', { ...item, type: 'next-action', activated });
-        toast(activated ? 'Activated as a next action' : 'Moved to the project — Activate it there to show on Next Actions');
+        await DB.put('items', { ...item, type: 'next-action' });
+        toast('Activated as a next action');
         onDone();
       } }, 'Activate'),
       el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openItemForm({ item, type: 'someday', onSaved: onDone }) }),

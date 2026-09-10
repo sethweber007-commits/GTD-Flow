@@ -30,15 +30,12 @@ a folder in your own Google Drive.
   is organized into three subsections — **Next Actions**, **Waiting On**,
   and **Project Info** (for non-actionable reference material tied to that
   project, e.g. confirmation numbers or account details) — each with its
-  own "+ Add" button. The first action added to a project is placed
-  straight onto the Next Actions list automatically; once a project already
-  has an active action, further ones start off the list until you tap
-  "Activate" — so a project is never left stalled for want of its one
-  action being switched on. The project list shows a "stalled" warning when
-  an active project has no open next action or waiting-on item (project
-  info doesn't count). From Clarify, turning an inbox item into a project
-  defaults the project title to the item's text, and lets you add its
-  first next action immediately or leave it for later.
+  own "+ Add" button. Every action added to a project is placed straight
+  onto the Next Actions list automatically. The project list shows a
+  "stalled" warning when an active project has no open next action or
+  waiting-on item (project info doesn't count). From Clarify, turning an
+  inbox item into a project defaults the project title to the item's text,
+  and lets you add its first next action immediately or leave it for later.
 - **Waiting For** — things delegated or expected from other people,
   capturable straight from Clarify or added directly to a project.
 - **Someday/Maybe** — ideas parked for later, with an optional tickler

@@ -26,6 +26,7 @@ document.querySelectorAll('.brand-name').forEach((n) => (n.textContent = CONFIG.
 async function main() {
   await DB.init();
   await seedIfEmpty();
+  await migrateAutoActivateActions();
 
   route('/inbox', renderInbox);
   route('/clarify', renderClarify);
@@ -75,6 +76,21 @@ async function main() {
   }
 }
 
+// One-time backfill for the old "activated" gate: project actions used to
+// stay off the Next Actions list until manually activated. That gate is
+// gone (every action now shows up as soon as it's added), so this clears
+// the leftover flag on anything still marked activated: false from before
+// the change, rather than leaving stale data no UI ever explains again.
+// Guarded by a meta flag so it only ever runs once per device.
+async function migrateAutoActivateActions() {
+  if (await DB.getMeta('migratedAutoActivateActions')) return;
+  const items = await DB.getByIndex('items', 'type', 'next-action');
+  for (const item of items) {
+    if (item.activated === false) await DB.put('items', { ...item, activated: true });
+  }
+  await DB.setMeta('migratedAutoActivateActions', true);
+}
+
 function wireNav() {
   const toggle = document.getElementById('nav-toggle');
   const sidebar = document.getElementById('sidebar');
@@ -109,7 +125,7 @@ async function updateNavBadges() {
     DB.getByIndex('items', 'type', 'calendar'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
-  paintBadge('next-actions-badge', allActions.filter((i) => !i.completed && i.activated !== false).length);
+  paintBadge('next-actions-badge', allActions.filter((i) => !i.completed).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);
   const stalledProjects = projects.filter((p) => p.status === 'active' && !openProjectItems.some((i) => i.projectId === p.id));

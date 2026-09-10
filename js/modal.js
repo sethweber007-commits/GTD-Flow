@@ -7,18 +7,6 @@ function host() {
   return document.getElementById('modal-host');
 }
 
-// True if the given project already has at least one open, activated next
-// action (i.e. something already showing on the global Next Actions list).
-// Used so that adding an action to a project auto-activates it straight
-// onto Next Actions when it would otherwise be the project's only one —
-// projects should never look "stalled" just because their sole action is
-// sitting un-activated.
-export async function projectHasActiveAction(projectId) {
-  if (!projectId) return false;
-  const items = await DB.getByIndex('items', 'projectId', projectId);
-  return items.some((i) => i.type === 'next-action' && !i.completed && i.activated !== false);
-}
-
 let stopKeyboardAvoidance = null;
 
 export function closeModal() {
@@ -190,26 +178,6 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     if (fd.has('tickleDate')) record.tickleDate = fd.get('tickleDate') ? new Date(fd.get('tickleDate')).toISOString() : null;
     if (fd.has('category')) record.category = fd.get('category') || '';
     if (record.type === 'next-action') record.important = fd.get('important') === 'on';
-
-    // Actions linked to a project are gated off the global Next Actions list
-    // until explicitly "Activated" from the project page — unless the
-    // project has no other active action yet, in which case this one is
-    // activated automatically (a project should never sit stalled just
-    // because its one action needs a manual activation step). A standalone
-    // action (no project) is unaffected and stays visible as before. On
-    // edit, only re-decide the flag when the project link is actually added
-    // or removed just now — leave it alone otherwise, so re-saving an
-    // already-activated project action (or one someone deliberately
-    // activated already) doesn't silently re-hide or re-show it.
-    if (record.type === 'next-action') {
-      if (!isEdit) {
-        record.activated = record.projectId ? !(await projectHasActiveAction(record.projectId)) : true;
-      } else if (!data.projectId && record.projectId) {
-        record.activated = !(await projectHasActiveAction(record.projectId));
-      } else if (data.projectId && !record.projectId) {
-        record.activated = true;
-      }
-    }
 
     try {
       if (isEdit) {
