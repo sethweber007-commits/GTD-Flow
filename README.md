@@ -62,8 +62,8 @@ a folder in your own Google Drive.
 level as an expandable section, so you can see the whole picture at once:
 - **Purpose & Principles** (40,000 ft)
 - **Vision** (30,000 ft)
-- **Goals** (20,000 ft)
-- **Areas of Focus & Accountability** (10,000 ft)
+- **Goals & Objectives** (20,000 ft) — grouped by the Role each goal serves, with a What/Why/How for each one
+- **Roles** (10,000 ft) — the different roles you play in life, each with standards you maintain
 - *(Projects and Next Actions above serve as the Runway and Ground level.)*
 
 **Sync & Backup**

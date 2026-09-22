@@ -411,6 +411,24 @@ select.clarify-input { background: var(--surface); }
 .accordion-body .subtitle { margin: -6px 0 14px; }
 .accordion-body .btn { margin-bottom: 14px; }
 
+/* Sub-accordion (Goals & Objectives grouped by Role) */
+.sub-accordion-list { display: flex; flex-direction: column; gap: 10px; }
+.sub-accordion {
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.sub-accordion > summary {
+  list-style: none; cursor: pointer; padding: 12px 14px;
+  display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+.sub-accordion > summary::-webkit-details-marker { display: none; }
+.sub-accordion > summary::marker { content: ''; }
+.sub-accordion-title { flex: 1; }
+.sub-accordion-count { font-size: 11px; font-weight: 600; color: var(--muted); }
+.sub-accordion-chevron { color: var(--muted); transition: transform 0.18s ease; display: inline-flex; }
+.sub-accordion[open] .sub-accordion-chevron { transform: rotate(180deg); }
+.sub-accordion-body { padding: 0 14px 14px; }
+
 /* Forms / modal */
 #modal-host {
   position: fixed; inset: 0; display: none; z-index: 100;

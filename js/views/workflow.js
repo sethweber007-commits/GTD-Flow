@@ -1166,7 +1166,7 @@ export async function renderReference() {
 const REVIEW_STEPS = [
   { group: 'Get Clear', items: ['Collect loose papers and materials', 'Empty your head — capture anything new into Inbox', 'Process your Inbox to zero', 'Empty your email inbox to zero (or plan to)'] },
   { group: 'Get Current', items: ['Review Next Actions lists', 'Review previous calendar dates for follow-ups', 'Review upcoming calendar', 'Review Waiting For list — follow up as needed', 'Review Projects list — ensure each has a next action', 'Review any relevant checklists'] },
-  { group: 'Get Creative', items: ['Review Someday/Maybe list — anything to activate?', 'Be creative and courageous — any new ideas to capture?', 'Review Areas of Focus, Goals, and Vision for alignment'] },
+  { group: 'Get Creative', items: ['Review Someday/Maybe list — anything to activate?', 'Be creative and courageous — any new ideas to capture?', 'Review Roles, Goals, and Vision for alignment'] },
 ];
 
 export async function renderReview() {

@@ -216,7 +216,7 @@ export async function openProjectForm({ project = null, onSaved }) {
     field('Project title', el('input', { type: 'text', name: 'title', required: true, value: data.title || '' })),
     field('Desired outcome', el('textarea', { name: 'outcome', rows: 2, placeholder: 'What does "done" look like?' }, data.outcome || '')),
     field('Status', selectEl('status', ['active', 'on-hold', 'someday', 'completed'], data.status)),
-    field('Area of Focus (optional)', selectEl('areaOfFocusId', areas.map((a) => a.title), areas.find((a) => a.id === data.areaOfFocusId)?.title, areas)),
+    field('Role (optional)', selectEl('areaOfFocusId', areas.map((a) => a.title), areas.find((a) => a.id === data.areaOfFocusId)?.title, areas)),
     field('Notes', el('textarea', { name: 'notes', rows: 2 }, data.notes || '')),
     el('div', { class: 'form-actions' }, [
       el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
