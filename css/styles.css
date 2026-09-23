@@ -354,8 +354,13 @@ body {
 .clarify-input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
 select.clarify-input { background: var(--surface); }
 .clarify-card--wide { max-width: 760px; }
-.clarify-menu-row { display: flex; gap: 28px; align-items: flex-start; }
-.clarify-menu-row .clarify-question { flex: 1; min-width: 0; }
+/* Always a row — the recent-categories panel stays to the right of the
+   main options at every width, including mobile, rather than stacking
+   below it. The panel's flex-basis shrinks on narrow screens (see the
+   media query below) instead of the layout switching to a column, so it
+   stays visually "to the side" even on a phone. */
+.clarify-menu-row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: nowrap; }
+.clarify-menu-row .clarify-question { flex: 1 1 auto; min-width: 0; }
 .clarify-recent-panel {
   flex: 0 0 200px; padding-left: 24px; border-left: 1px solid var(--border);
 }
@@ -363,9 +368,11 @@ select.clarify-input { background: var(--surface); }
   font-weight: 600; font-size: 13px; color: var(--muted); margin: 18px 0 12px;
 }
 .clarify-options-compact .btn-choice-compact { padding: 8px 12px; font-size: 13.5px; }
-@media (max-width: 640px) {
-  .clarify-menu-row { flex-direction: column; }
-  .clarify-recent-panel { border-left: none; border-top: 1px solid var(--border); padding-left: 0; padding-top: 16px; margin-top: 4px; }
+@media (max-width: 480px) {
+  .clarify-menu-row { gap: 10px; }
+  .clarify-recent-panel { flex-basis: 112px; padding-left: 10px; }
+  .clarify-recent-heading { font-size: 11px; margin: 14px 0 8px; }
+  .clarify-options-compact .btn-choice-compact { padding: 8px 6px; font-size: 11.5px; }
 }
 
 /* Weekly review */
