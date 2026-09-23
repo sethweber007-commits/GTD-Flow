@@ -353,6 +353,20 @@ body {
 }
 .clarify-input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
 select.clarify-input { background: var(--surface); }
+.clarify-card--wide { max-width: 760px; }
+.clarify-menu-row { display: flex; gap: 28px; align-items: flex-start; }
+.clarify-menu-row .clarify-question { flex: 1; min-width: 0; }
+.clarify-recent-panel {
+  flex: 0 0 200px; padding-left: 24px; border-left: 1px solid var(--border);
+}
+.clarify-recent-heading {
+  font-weight: 600; font-size: 13px; color: var(--muted); margin: 18px 0 12px;
+}
+.clarify-options-compact .btn-choice-compact { padding: 8px 12px; font-size: 13.5px; }
+@media (max-width: 640px) {
+  .clarify-menu-row { flex-direction: column; }
+  .clarify-recent-panel { border-left: none; border-top: 1px solid var(--border); padding-left: 0; padding-top: 16px; margin-top: 4px; }
+}
 
 /* Weekly review */
 .review-progress { font-weight: 700; color: var(--primary); margin-bottom: 6px; }

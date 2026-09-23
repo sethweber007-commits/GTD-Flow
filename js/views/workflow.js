@@ -139,9 +139,26 @@ export async function renderInbox() {
 }
 
 // -------------------------------------------------------------- CLARIFY ---
+// Distinct Reference categories, most-recently-used first — powers the
+// Clarify menu's one-tap "recently used" shortcuts. Not the same list as
+// modal.js's distinctCategories(), which sorts alphabetically for the item
+// editor's <datalist>; this one is recency-ordered and capped, since it's
+// meant to surface a short "what you just filed" set rather than every
+// category that's ever existed.
+async function recentReferenceCategories(limit = 5) {
+  const refItems = (await DB.getByIndex('items', 'type', 'reference')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const seen = [];
+  for (const item of refItems) {
+    if (item.category && !seen.includes(item.category)) seen.push(item.category);
+    if (seen.length >= limit) break;
+  }
+  return seen;
+}
+
 export async function renderClarify() {
   const items = (await DB.getByIndex('items', 'type', 'inbox')).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const projects = (await DB.getAll('projects')).filter((p) => p.status !== 'completed');
+  const recentCategories = await recentReferenceCategories();
   const r = root();
   r.innerHTML = '';
   r.appendChild(pageHeader('Clarify', 'Process your inbox one item at a time.'));
@@ -206,13 +223,17 @@ export async function renderClarify() {
     ].filter(Boolean)));
 
     if (state.step === 'menu') {
-      card.appendChild(question('What is this?', [
-        [['plus', 'New item'], () => { state.step = 'new-item-menu'; renderStep(); }],
-        [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }],
-        [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true)],
-        [['moon', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
-        [['calendar', 'Schedule'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
-      ]));
+      card.classList.toggle('clarify-card--wide', recentCategories.length > 0);
+      card.appendChild(el('div', { class: 'clarify-menu-row' }, [
+        question('What is this?', [
+          [['plus', 'New item'], () => { state.step = 'new-item-menu'; renderStep(); }],
+          [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }],
+          [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true)],
+          [['moon', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
+          [['calendar', 'Schedule'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
+        ]),
+        recentCategories.length ? recentReferencePanel() : null,
+      ].filter(Boolean)));
     } else if (state.step === 'new-item-menu') {
       card.appendChild(question('What kind of new item?', [
         [['checkCircle', 'Action'], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true)],
@@ -291,6 +312,25 @@ export async function renderClarify() {
     } else {
       refresh(renderClarify);
     }
+  }
+
+  // One-tap shortcuts for filing straight into a recently-used Reference
+  // category — skips the follow-up editor entirely (no openEditorAfter),
+  // unlike the "Reference" choice in the main menu above, which still opens
+  // it so you can pick a category. This is for the common case of filing
+  // several similar things in a row (e.g. a batch of recipes or receipts)
+  // without re-picking the category each time.
+  function recentReferencePanel() {
+    return el('div', { class: 'clarify-recent-panel' }, [
+      el('p', { class: 'clarify-recent-heading' }, 'File as Reference — recent categories'),
+      el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.map((cat) =>
+        el('button', {
+          class: 'btn btn-choice btn-choice-compact',
+          title: `File as Reference in "${cat}"`,
+          onclick: () => finish(async () => { await DB.put('items', { ...current, type: 'reference', category: cat }); }),
+        }, [el('span', { class: 'choice-icon', html: iconSvg('book', 16) }), ' ' + cat])
+      )),
+    ]);
   }
 
   function question(text, options) {
