@@ -210,11 +210,23 @@ export async function renderClarify() {
     }
   }
 
+  // Already-done items don't need to become a live next action just to be
+  // marked done — file it straight into Next Actions' completed history.
+  // No confirmModal here (unlike discardCurrent): this is reversible from
+  // the Next Actions list by unchecking it, so it doesn't warrant a
+  // destructive-style confirmation.
+  async function completeCurrent() {
+    await DB.put('items', { ...current, type: 'next-action', completed: true, completedAt: new Date().toISOString() });
+    toast('Marked as completed');
+    refresh(renderClarify);
+  }
+
   function renderStep() {
     card.innerHTML = '';
     card.appendChild(el('div', { class: 'clarify-item' }, [
       el('div', { class: 'clarify-item-toprow' }, [
         el('div', { class: 'clarify-count' }, `Item 1 of ${items.length}`),
+        el('button', { class: 'icon-btn', title: 'Already done — mark completed', html: iconSvg('checkCircle', 16), onclick: completeCurrent }),
         el('button', { class: 'icon-btn', title: 'Discard this item', html: iconSvg('trash', 16), onclick: discardCurrent }),
       ]),
       el('h2', {}, current.title),
