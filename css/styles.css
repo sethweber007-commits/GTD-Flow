@@ -338,7 +338,18 @@ body {
 .clarify-count { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .clarify-item-toprow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .clarify-item-toprow .icon-btn:hover { background: var(--danger-light); color: var(--danger); }
-.clarify-card h2 { margin: 0 0 4px; font-size: 22px; }
+/* Reserves space for the title/notes so the menu row below — including the
+   recent-references panel — starts at the same height regardless of how
+   long the item being clarified is. Title and notes are clamped to 2 lines
+   each so they can't grow past what min-height reserves. */
+.clarify-item { min-height: 158px; }
+.clarify-card h2 {
+  margin: 0 0 4px; font-size: 22px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.clarify-item .item-notes {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .clarify-question p { font-weight: 600; margin: 18px 0 12px; }
 .clarify-options { display: flex; flex-direction: column; }
 .clarify-project-pill {

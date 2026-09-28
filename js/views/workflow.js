@@ -145,7 +145,7 @@ export async function renderInbox() {
 // editor's <datalist>; this one is recency-ordered and capped, since it's
 // meant to surface a short "what you just filed" set rather than every
 // category that's ever existed.
-async function recentReferenceCategories(limit = 5) {
+async function recentReferenceCategories(limit = 7) {
   const refItems = (await DB.getByIndex('items', 'type', 'reference')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const seen = [];
   for (const item of refItems) {

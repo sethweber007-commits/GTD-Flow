@@ -60,7 +60,7 @@ a folder in your own Google Drive.
 
 **Horizons of Focus** — condensed into a single tab with each altitude
 level as an expandable section, so you can see the whole picture at once:
-- **Purpose & Principles** (40,000 ft)
+- **Values** (40,000 ft)
 - **Vision** (30,000 ft)
 - **Goals & Objectives** (20,000 ft) — grouped by the Role each goal serves, with a What/Why/How for each one
 - **Roles** (10,000 ft) — the different roles you play in life, each with standards you maintain

@@ -1,6 +1,6 @@
 // Horizons of Focus: the "altitude" levels above day-to-day GTD workflow,
 // condensed into one tab with each level as an expandable section.
-// 40,000ft Purpose & Principles · 30,000ft Vision · 20,000ft Goals ·
+// 40,000ft Values · 30,000ft Vision · 20,000ft Goals ·
 // 10,000ft Roles. (Projects and Next Actions are the Runway and
 // Ground level, covered in workflow.js.)
 import { DB } from '../db.js';
@@ -90,7 +90,7 @@ export async function renderHorizons() {
     el('div', { class: 'page-header' }, [
       el('div', {}, [
         el('h1', {}, 'Horizons of Focus'),
-        el('p', { class: 'subtitle' }, 'Zoom out from daily tasks — Purpose, Vision, Goals, and Roles, each expandable below.'),
+        el('p', { class: 'subtitle' }, 'Zoom out from daily tasks — Values, Vision, Goals, and Roles, each expandable below.'),
       ]),
     ])
   );
@@ -108,10 +108,10 @@ function refresh() {
 // ------------------------------------------------------------- PURPOSE ----
 async function purposeSection() {
   const items = await DB.getAll('purpose');
-  return sectionCard('purpose', 'Purpose & Principles', '40,000 ft', 'Why you do what you do, and the standards you hold yourself to.', (body) => {
+  return sectionCard('purpose', 'Values', '40,000 ft', 'Why you do what you do, and the standards you hold yourself to.', (body) => {
     body.appendChild(el('button', { class: 'btn btn-primary btn-small', onclick: () => openForm() }, [el('span', { html: iconSvg('plus', 15) }), ' Add']));
     const list = el('div', { class: 'list' });
-    if (!items.length) list.appendChild(emptyState('Your core purpose and guiding principles go here.'));
+    if (!items.length) list.appendChild(emptyState('Your core values go here.'));
     items.forEach((p) => {
       list.appendChild(
         el('div', { class: 'item-row' }, [
@@ -128,7 +128,7 @@ async function purposeSection() {
 
   function openForm(p = null) {
     const form = simpleForm({
-      title: p ? 'Edit' : 'New purpose / principle',
+      title: p ? 'Edit' : 'New value',
       fields: [{ name: 'title', label: 'Title' }, { name: 'body', label: 'Statement', type: 'textarea', rows: 5 }],
       data: p,
       onSubmit: async (values) => {
@@ -193,8 +193,8 @@ async function goalsSection() {
   const roles = await DB.getAll('areasOfFocus');
   return sectionCard('goals', 'Goals & Objectives', '20,000 ft', 'What you want to achieve in the next 1–2 years, grouped by the role each goal serves — with the what, why, and how behind it.', (body) => {
     body.appendChild(el('button', { class: 'btn btn-primary btn-small', onclick: () => openForm() }, [el('span', { html: iconSvg('plus', 15) }), ' Add']));
-    if (!goals.length) {
-      body.appendChild(emptyState(roles.length ? 'No goals yet.' : 'Add a role below, then set goals for it.'));
+    if (!roles.length && !goals.length) {
+      body.appendChild(emptyState('Add a role below, then set goals for it.'));
       return;
     }
 
@@ -206,11 +206,11 @@ async function goalsSection() {
       else unassigned.push(g);
     });
 
+    // Every role gets a group, even with zero goals, so Goals & Objectives
+    // shows the full set of roles at a glance rather than only the ones
+    // that already have a goal attached.
     const groups = el('div', { class: 'sub-accordion-list' });
-    roles.forEach((r) => {
-      const roleGoals = byRole.get(r.id);
-      if (roleGoals.length) groups.appendChild(roleGroup(r, roleGoals));
-    });
+    roles.forEach((r) => groups.appendChild(roleGroup(r, byRole.get(r.id))));
     if (unassigned.length) groups.appendChild(roleGroup(null, unassigned));
     body.appendChild(groups);
   });
@@ -231,7 +231,8 @@ async function goalsSection() {
       ])
     );
     const list = el('div', { class: 'list' });
-    roleGoals.forEach((g) => list.appendChild(goalRow(g)));
+    if (roleGoals.length) roleGoals.forEach((g) => list.appendChild(goalRow(g)));
+    else list.appendChild(emptyState('No goals yet for this role.'));
     details.appendChild(el('div', { class: 'sub-accordion-body' }, [list]));
     return details;
   }
