@@ -49,7 +49,8 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, m
       // Shown above the title, at the same font size/weight, so which
       // project an action belongs to is immediately clear rather than
       // buried in the small meta line below.
-      projectLabel ? el('div', { class: 'item-project-label' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + projectLabel]) : null,
+      // Links to that project's detail page.
+      projectLabel ? el('a', { class: 'item-project-label', href: '#/projects/' + encodeURIComponent(projectLabel.id), title: 'Open project' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + projectLabel.title]) : null,
       el('div', { class: 'item-title' }, item.title),
       item.notes ? el('div', { class: 'item-notes' }, item.notes) : null,
       meta ? el('div', { class: 'item-meta' }, meta) : null,
@@ -448,7 +449,7 @@ export async function renderNextActions() {
         importantList.appendChild(
           itemRow(item, {
             meta: item.context || null,
-            projectLabel: proj ? proj.title : null,
+            projectLabel: proj || null,
             onComplete: async (it) => {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
               refresh(renderNextActions);
@@ -486,7 +487,7 @@ export async function renderNextActions() {
         const proj = projects.find((p) => p.id === item.projectId);
         list.appendChild(
           itemRow(item, {
-            projectLabel: proj ? proj.title : null,
+            projectLabel: proj || null,
             onComplete: async (it) => {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
               refresh(renderNextActions);
@@ -512,7 +513,7 @@ export async function renderNextActions() {
         completedList.appendChild(
           itemRow(item, {
             meta: item.completedAt ? `Completed ${formatDate(item.completedAt)}` : '',
-            projectLabel: proj ? proj.title : null,
+            projectLabel: proj || null,
             onComplete: async (it) => {
               await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
               refresh(renderNextActions);
