@@ -121,7 +121,7 @@ function goalNode(goal, childrenMap, depth) {
           ])
         : null,
     ].filter(Boolean)),
-    el('div', { class: 'item-actions' }, [
+    el('div', { class: 'goal-actions' }, [
       el('button', { class: 'icon-btn', title: 'Add subgoal', html: iconSvg('plus', 16), onclick: () => { collapsed.delete(goal.id); openGoalForm({ parentId: goal.id }); } }),
       el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openGoalForm({ goal }) }),
       el('button', {
