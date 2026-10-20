@@ -4,6 +4,7 @@ import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomed
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
 import { iconSvg } from '../icons.js';
+import { goalSummary } from './goals.js';
 
 function root() {
   return document.getElementById('view-root');
@@ -119,6 +120,7 @@ export async function renderInbox() {
       items.length ? el('button', { class: 'btn btn-primary', onclick: () => navigate('/clarify') }, iconLabel('compass', `Clarify (${items.length})`)) : null,
     ].filter(Boolean))
   );
+  r.appendChild(await goalSummary());
   r.appendChild(quickForm);
 
   const list = el('div', { class: 'list' });

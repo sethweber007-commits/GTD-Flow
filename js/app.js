@@ -17,6 +17,7 @@ import {
   renderReference,
   renderReview,
 } from './views/workflow.js';
+import { renderGoals } from './views/goals.js';
 import { renderHorizons } from './views/horizons.js';
 import { renderSettings } from './views/settings.js';
 
@@ -40,6 +41,7 @@ async function main() {
   route('/schedule', () => navigate('/calendar'));
   route('/reference', renderReference);
   route('/review', renderReview);
+  route('/goals', renderGoals);
   route('/horizons', renderHorizons);
   // Old deep links from the previous 4-tab layout still land somewhere useful.
   route('/horizons/:level', () => navigate('/horizons'));

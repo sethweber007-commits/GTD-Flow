@@ -3,7 +3,7 @@
 // (like the Google Drive backup module) react whenever data changes.
 
 const DB_NAME = 'gtd-pwa-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = {
   items: { keyPath: 'id', indexes: ['type', 'context', 'projectId', 'tickleDate', 'calendarDate', 'completed', 'category', 'sectionId'] },
@@ -11,6 +11,8 @@ const STORES = {
   sections: { keyPath: 'id', indexes: ['view'] },
   areasOfFocus: { keyPath: 'id', indexes: [] },
   goals: { keyPath: 'id', indexes: ['areaOfFocusId', 'status'] },
+  // Goal tracker (js/views/goals.js): nested goals/subgoals via parentId.
+  trackedGoals: { keyPath: 'id', indexes: ['parentId'] },
   vision: { keyPath: 'id', indexes: [] },
   purpose: { keyPath: 'id', indexes: [] },
   reviews: { keyPath: 'id', indexes: [] },
