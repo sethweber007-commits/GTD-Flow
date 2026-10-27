@@ -86,6 +86,39 @@ function openGoalForm({ goal = null, parentId = null }) {
   requestAnimationFrame(() => title.focus({ preventScroll: true }));
 }
 
+// Adds `count` subgoals titled with plain numbers. Numbering continues after
+// the highest purely-numeric title already among the parent's direct children.
+function openBulkSubgoalForm(parent) {
+  const count = el('input', { type: 'number', name: 'count', min: '1', max: '200', step: '1', value: '10', required: true });
+  const form = el('form', { class: 'form' }, [
+    el('h3', {}, 'Add numbered subgoals'),
+    el('p', { class: 'subtitle' }, `Under "${parent.title}". Titles are plain numbers (1, 2, 3…), continuing after any existing numbered subgoals.`),
+    el('label', { class: 'field' }, [el('span', {}, 'How many?'), count]),
+    el('div', { class: 'form-actions' }, [
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { type: 'submit', class: 'btn btn-primary' }, 'Add'),
+    ]),
+  ]);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const n = Math.floor(Number(count.value));
+    if (!Number.isFinite(n) || n < 1 || n > 200) return;
+    const siblings = (await DB.getAll('trackedGoals')).filter((g) => g.parentId === parent.id);
+    const highest = siblings.reduce((m, g) => (/^\d+$/.test(g.title.trim()) ? Math.max(m, Number(g.title.trim())) : m), 0);
+    // Explicit, strictly increasing createdAt keeps the list in numeric order
+    // (siblings are sorted by createdAt, and a shared timestamp would tie).
+    const base = Date.now();
+    for (let i = 1; i <= n; i++) {
+      await DB.add('trackedGoals', { title: String(highest + i), dueDate: '', parentId: parent.id, done: false, createdAt: new Date(base + i).toISOString() });
+    }
+    closeModal();
+    toast(`Added subgoals ${highest + 1}–${highest + n}`);
+    refresh();
+  });
+  openModal(form);
+  requestAnimationFrame(() => count.focus({ preventScroll: true }));
+}
+
 function goalNode(goal, childrenMap, depth) {
   const kids = childrenMap.get(goal.id) || [];
   const p = progressOf(goal, childrenMap);
@@ -123,6 +156,7 @@ function goalNode(goal, childrenMap, depth) {
     ].filter(Boolean)),
     el('div', { class: 'goal-actions' }, [
       el('button', { class: 'icon-btn', title: 'Add subgoal', html: iconSvg('plus', 16), onclick: () => { collapsed.delete(goal.id); openGoalForm({ parentId: goal.id }); } }),
+      el('button', { class: 'icon-btn', title: 'Add numbered subgoals (e.g. chapters)', html: iconSvg('layers', 16), onclick: () => { collapsed.delete(goal.id); openBulkSubgoalForm(goal); } }),
       el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openGoalForm({ goal }) }),
       el('button', {
         class: 'icon-btn danger',
