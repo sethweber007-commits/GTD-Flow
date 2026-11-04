@@ -175,7 +175,11 @@ function goalNode(goal, childrenMap, depth) {
 
   const node = el('div', { class: 'goal-node' }, [header]);
   if (isParent && !isCollapsed) {
-    node.appendChild(el('div', { class: 'goal-children' }, kids.map((k) => goalNode(k, childrenMap, depth + 1))));
+    // Completed subgoals sink to the bottom; Array.sort is stable, so the
+    // creation order is preserved within the open and the done groups.
+    const done = (k) => progressOf(k, childrenMap) === 1;
+    const ordered = [...kids].sort((a, b) => done(a) - done(b));
+    node.appendChild(el('div', { class: 'goal-children' }, ordered.map((k) => goalNode(k, childrenMap, depth + 1))));
   }
   return node;
 }
