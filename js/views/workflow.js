@@ -50,6 +50,15 @@ export function isDailyDone(item) {
 async function setPlanned(item, planned) {
   await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null });
 }
+// A whole project can be on today's plan too (same plannedDate field on the
+// project record, same carry-over behaviour). Only live projects count —
+// completing or parking one drops it off the plan without clearing the field.
+export function isProjectOnTodaysPlan(project) {
+  return (project.status === 'active' || project.status === 'on-hold') && !!project.plannedDate && project.plannedDate <= localDateKey();
+}
+async function setProjectPlanned(project, planned) {
+  await DB.put('projects', { ...project, plannedDate: planned ? localDateKey() : null });
+}
 
 function pageHeader(title, subtitle, actions = []) {
   return el('div', { class: 'page-header' }, [
@@ -410,11 +419,15 @@ export async function renderClarify() {
 // ------------------------------------------------------- TODAY'S PLAN ---
 export async function renderTodaysPlan() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
-  const planned = allItems.filter(isOnTodaysPlan);
+  const projects = await DB.getAll('projects');
+  const plannedProjects = projects.filter(isProjectOnTodaysPlan).sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
+  const plannedProjectIds = new Set(plannedProjects.map((p) => p.id));
+  // Actions of a planned project are shown inside that project's card, so
+  // they're left out of the flat "To do" list to avoid listing them twice.
+  const planned = allItems.filter((i) => isOnTodaysPlan(i) && !plannedProjectIds.has(i.projectId));
   // Completed items stay visible only for the day they were finished.
   const dailies = (await DB.getByIndex('items', 'type', 'daily')).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const doneToday = allItems.filter((i) => i.completed && i.plannedDate && isToday(i.completedAt));
-  const projects = await DB.getAll('projects');
   const today = localDateKey();
   const r = root();
   r.innerHTML = '';
@@ -422,14 +435,14 @@ export async function renderTodaysPlan() {
 
   r.appendChild(
     pageHeader("Today's Plan", 'What you are committing to today. Unfinished items carry over to tomorrow.', [
-      el('button', { class: 'btn btn-ghost', onclick: () => openPlanPicker(allItems.filter((i) => !i.completed && !isOnTodaysPlan(i)), again) }, iconLabel('sun', 'Add from Next Actions')),
+      el('button', { class: 'btn btn-ghost', onclick: () => openPlanPicker(allItems.filter((i) => !i.completed && !isOnTodaysPlan(i)), projects.filter((p) => (p.status === 'active' || p.status === 'on-hold') && !isProjectOnTodaysPlan(p)), again) }, iconLabel('sun', 'Add to plan')),
       el('button', { class: 'btn btn-ghost', onclick: () => openItemForm({ type: 'daily', onSaved: again }) }, iconLabel('refresh', 'Add daily item')),
       el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'next-action', defaults: { context: 'Today', plannedDate: today }, onSaved: again }) }, iconLabel('plus', 'Add action')),
     ])
   );
 
-  if (!planned.length && !doneToday.length && !dailies.length) {
-    r.appendChild(emptyState("Nothing planned yet. Use “Add from Next Actions”, tap the sun icon on any next action, or add a new one here."));
+  if (!planned.length && !doneToday.length && !dailies.length && !plannedProjects.length) {
+    r.appendChild(emptyState("Nothing planned yet. Use “Add to plan”, tap the sun icon on any next action or project, or add a new action here."));
     return;
   }
 
@@ -463,6 +476,39 @@ export async function renderTodaysPlan() {
       });
     })));
   }
+  if (plannedProjects.length) {
+    r.appendChild(el('h3', { class: 'group-heading' }, `Projects (${plannedProjects.length})`));
+    r.appendChild(el('div', { class: 'list' }, plannedProjects.map((p) => {
+      const open = allItems.filter((i) => i.projectId === p.id && !i.completed);
+      const sortedOpen = [...open].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.title.localeCompare(b.title));
+      const carried = p.plannedDate < today;
+      return el('div', { class: 'plan-project' }, [
+        el('div', { class: 'item-row plan-project-head' }, [
+          el('div', { class: 'item-main' }, [
+            el('a', { class: 'item-project-label', href: '#/projects/' + encodeURIComponent(p.id), title: 'Open project' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + p.title]),
+            p.outcome ? el('div', { class: 'item-notes' }, p.outcome) : null,
+            carried ? el('div', { class: 'item-meta' }, 'Carried over from ' + formatDate(p.plannedDate)) : null,
+          ].filter(Boolean)),
+          el('div', { class: 'item-actions' }, [
+            el('button', { class: 'btn btn-ghost btn-small', onclick: () => openItemForm({ type: 'next-action', defaults: { projectId: p.id }, onSaved: again }) }, iconLabel('plus', 'Add action', 13)),
+            el('button', { class: 'btn btn-ghost btn-small', onclick: () => completeProject(p, again) }, iconLabel('checkCircle', 'Complete project', 13)),
+            el('button', { class: 'icon-btn', title: "Remove project from Today's Plan", html: iconSvg('x', 16), onclick: () => setProjectPlanned(p, false).then(again) }),
+          ]),
+        ]),
+        el('div', { class: 'plan-project-actions' }, sortedOpen.length
+          ? sortedOpen.map((item) => itemRow(item, {
+              meta: item.context || null,
+              onComplete: async (it) => {
+                await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
+                again();
+              },
+              onImportant: (it) => toggleImportant(it, again),
+              onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: again }),
+            }))
+          : [el('div', { class: 'empty-state-small' }, 'No open next action — add one so this project keeps moving.')]),
+      ]);
+    })));
+  }
   if (planned.length) {
     const sorted = [...planned].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
     r.appendChild(el('h3', { class: 'group-heading' }, `To do (${planned.length})`));
@@ -475,17 +521,35 @@ export async function renderTodaysPlan() {
 }
 
 // Modal for pulling existing open next actions onto today's plan.
-function openPlanPicker(candidates, onDone) {
+function openPlanPicker(candidates, projectCandidates, onDone) {
   const form = el('form', { class: 'form' });
   form.appendChild(el('h3', {}, "Add to Today's Plan"));
-  if (!candidates.length) {
-    form.appendChild(el('p', {}, 'Every open next action is already on today’s plan.'));
+  if (!candidates.length && !projectCandidates.length) {
+    form.appendChild(el('p', {}, 'Every open next action and project is already on today’s plan.'));
     form.appendChild(el('div', { class: 'form-actions' }, [el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Close')]));
     openModal(form);
     return;
   }
   const search = el('input', { type: 'search', placeholder: 'Filter…' });
   const list = el('div', { class: 'list' });
+  const projectRows = [...projectCandidates]
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map((project) => {
+      const box = el('input', { type: 'checkbox', value: project.id });
+      const row = el('label', { class: 'item-row' }, [
+        box,
+        el('div', { class: 'item-main' }, [
+          el('div', { class: 'item-title' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + project.title]),
+          el('div', { class: 'item-meta' }, 'Whole project'),
+        ]),
+      ]);
+      return { project, box, row, text: project.title };
+    });
+  if (projectRows.length) {
+    list.appendChild(el('h4', { class: 'group-heading' }, 'Projects'));
+    projectRows.forEach(({ row }) => list.appendChild(row));
+    if (candidates.length) list.appendChild(el('h4', { class: 'group-heading' }, 'Next Actions'));
+  }
   const rows = [...candidates]
     .sort((a, b) => (a.context || '⁣').localeCompare(b.context || '⁣') || a.title.localeCompare(b.title))
     .map((item) => {
@@ -503,6 +567,7 @@ function openPlanPicker(candidates, onDone) {
   search.addEventListener('input', () => {
     const q = search.value.trim().toLowerCase();
     rows.forEach(({ item, row }) => { row.style.display = !q || (item.title + ' ' + (item.context || '')).toLowerCase().includes(q) ? '' : 'none'; });
+    projectRows.forEach(({ text, row }) => { row.style.display = !q || text.toLowerCase().includes(q) ? '' : 'none'; });
   });
   form.appendChild(search);
   form.appendChild(el('div', { style: 'max-height:50vh;overflow:auto;margin:8px 0' }, [list]));
@@ -513,9 +578,12 @@ function openPlanPicker(candidates, onDone) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const chosen = rows.filter((x) => x.box.checked);
+    const chosenProjects = projectRows.filter((x) => x.box.checked);
     for (const { item } of chosen) await setPlanned(item, true);
+    for (const { project } of chosenProjects) await setProjectPlanned(project, true);
     closeModal();
-    if (chosen.length) toast(`Added ${chosen.length} to Today's Plan`);
+    const total = chosen.length + chosenProjects.length;
+    if (total) toast(`Added ${total} to Today's Plan`);
     onDone();
   });
   openModal(form);
@@ -775,6 +843,14 @@ export async function renderProjects() {
             ].filter(Boolean)),
             el('div', { class: 'item-actions' }, [
               status !== 'completed'
+                ? el('button', {
+                    class: 'icon-btn' + (isProjectOnTodaysPlan(p) ? ' plan-active' : ''),
+                    title: isProjectOnTodaysPlan(p) ? "Remove from Today's Plan" : "Add project to Today's Plan",
+                    html: iconSvg('sun', 16, isProjectOnTodaysPlan(p) ? 'icon-filled' : ''),
+                    onclick: stopNav(() => setProjectPlanned(p, !isProjectOnTodaysPlan(p)).then(() => refresh(renderProjects))),
+                  })
+                : null,
+              status !== 'completed'
                 ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: stopNav(() => sendProjectToSomeday(p, () => refresh(renderProjects))) })
                 : null,
             ].filter(Boolean)),
@@ -815,10 +891,10 @@ async function reactivateProject(project, onDone) {
 // groups on the Projects page. completedAt records when this happened (as
 // opposed to updatedAt, which a later unrelated edit would bump) — cleanup.js
 // uses it to auto-purge projects completed over a month ago.
-async function completeProject(project) {
+async function completeProject(project, onDone = () => navigate('/projects')) {
   await DB.put('projects', { ...project, status: 'completed', completedAt: new Date().toISOString() });
   toast('Project marked complete');
-  navigate('/projects');
+  onDone();
 }
 
 export async function renderProjectDetail(id) {
@@ -834,6 +910,9 @@ export async function renderProjectDetail(id) {
 
   r.appendChild(
     pageHeader(project.title, project.outcome, [
+      project.status !== 'someday' && project.status !== 'completed'
+        ? el('button', { class: 'btn btn-ghost', onclick: () => setProjectPlanned(project, !isProjectOnTodaysPlan(project)).then(refreshMe) }, iconLabel('sun', isProjectOnTodaysPlan(project) ? "Remove from Today's Plan" : "Add to Today's Plan", 14))
+        : null,
       project.status !== 'someday' && project.status !== 'completed'
         ? el('button', { class: 'btn btn-ghost', onclick: () => sendProjectToSomeday(project, refreshMe) }, iconLabel('moon', 'Send to Someday/Maybe', 14))
         : null,
@@ -885,6 +964,7 @@ export async function renderProjectDetail(id) {
         refreshMe();
       },
       onImportant: (it) => toggleImportant(it, refreshMe),
+      onPlan: item.completed ? null : (x) => setPlanned(x, !isOnTodaysPlan(x)).then(refreshMe),
       onSomeday: (it) => sendItemToSomeday(it, refreshMe),
       onEdit: (it) => openItemForm({ item: it, type: it.type, onSaved: refreshMe }),
       onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refreshMe(); } },

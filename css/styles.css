@@ -287,6 +287,10 @@ a.item-project-label:hover { text-decoration: underline; }
 .icon-btn.danger:hover { background: var(--danger-light); color: var(--danger); }
 .icon-btn.plan-active { color: var(--primary); }
 .icon-btn.plan-active:hover { background: var(--primary-light); }
+.plan-project { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.plan-project-head { border: 0; border-radius: 0; margin: 0; }
+.plan-project-actions { padding: 0 8px 8px 24px; }
+.plan-project-actions .item-row { margin-top: 6px; }
 .icon-btn.important-active { color: var(--warn); }
 .icon-btn.important-active:hover { background: var(--warn-light); }
 .icon-filled { fill: currentColor; }

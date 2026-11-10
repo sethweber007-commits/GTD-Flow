@@ -11,6 +11,7 @@ import {
   renderNextActions,
   renderTodaysPlan,
   isOnTodaysPlan,
+  isProjectOnTodaysPlan,
   isDailyDone,
   renderProjects,
   renderProjectDetail,
@@ -132,7 +133,8 @@ async function updateNavBadges() {
     DB.getByIndex('items', 'type', 'daily'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
-  paintBadge('todays-plan-badge', allActions.filter(isOnTodaysPlan).length + dailyItems.filter((d) => !isDailyDone(d)).length);
+  const plannedProjectIds = new Set(projects.filter(isProjectOnTodaysPlan).map((p) => p.id));
+  paintBadge('todays-plan-badge', allActions.filter((i) => isOnTodaysPlan(i) && !plannedProjectIds.has(i.projectId)).length + plannedProjectIds.size + dailyItems.filter((d) => !isDailyDone(d)).length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);
