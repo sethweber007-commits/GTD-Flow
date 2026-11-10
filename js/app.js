@@ -9,6 +9,8 @@ import {
   renderInbox,
   renderClarify,
   renderNextActions,
+  renderTodaysPlan,
+  isOnTodaysPlan,
   renderProjects,
   renderProjectDetail,
   renderWaitingFor,
@@ -31,6 +33,7 @@ async function main() {
 
   route('/inbox', renderInbox);
   route('/clarify', renderClarify);
+  route('/todays-plan', renderTodaysPlan);
   route('/next-actions', renderNextActions);
   route('/projects', renderProjects);
   route('/projects/:id', ({ id }) => renderProjectDetail(id));
@@ -127,6 +130,7 @@ async function updateNavBadges() {
     DB.getByIndex('items', 'type', 'calendar'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
+  paintBadge('todays-plan-badge', allActions.filter(isOnTodaysPlan).length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);

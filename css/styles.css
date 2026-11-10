@@ -285,6 +285,8 @@ a.item-project-label:hover { text-decoration: underline; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; color: var(--muted); padding: 5px 7px; border-radius: 6px; }
 .icon-btn:hover { background: var(--bg); color: var(--ink); }
 .icon-btn.danger:hover { background: var(--danger-light); color: var(--danger); }
+.icon-btn.plan-active { color: var(--primary); }
+.icon-btn.plan-active:hover { background: var(--primary-light); }
 .icon-btn.important-active { color: var(--warn); }
 .icon-btn.important-active:hover { background: var(--warn-light); }
 .icon-filled { fill: currentColor; }

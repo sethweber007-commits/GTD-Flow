@@ -1,6 +1,6 @@
 import { DB } from '../db.js';
 import { el, toast, formatDate, isPast, isToday, downloadTextFile, mdEscape, projectPicker } from '../utils.js';
-import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection } from '../modal.js';
+import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomedaySection, openModal, closeModal } from '../modal.js';
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
 import { iconSvg } from '../icons.js';
@@ -26,6 +26,23 @@ let nextActionsCollapsed;
 // collapsed".
 let somedayCollapsed;
 
+// ---- Today's Plan ----------------------------------------------------------
+// A Next Action is "on today's plan" when it carries a plannedDate (local
+// YYYY-MM-DD) that is today or earlier and it isn't completed. Because the
+// plan is just a field on the same item record, the action stays in Next
+// Actions and the two lists can never disagree. Unfinished items keep their
+// old plannedDate, which is what makes them carry over to the next day.
+export function localDateKey(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+export function isOnTodaysPlan(item) {
+  return item.type === 'next-action' && !item.completed && !!item.plannedDate && item.plannedDate <= localDateKey();
+}
+async function setPlanned(item, planned) {
+  await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null });
+}
+
 function pageHeader(title, subtitle, actions = []) {
   return el('div', { class: 'page-header' }, [
     el('div', {}, [el('h1', {}, title), subtitle ? el('p', { class: 'subtitle' }, subtitle) : null].filter(Boolean)),
@@ -41,7 +58,7 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onPlan, onUnplan, meta, projectLabel } = {}) {
   return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
@@ -65,6 +82,15 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, m
             onclick: () => onImportant(item),
           })
         : null,
+      onPlan
+        ? el('button', {
+            class: 'icon-btn' + (isOnTodaysPlan(item) ? ' plan-active' : ''),
+            title: isOnTodaysPlan(item) ? "Remove from Today's Plan" : "Add to Today's Plan",
+            html: iconSvg('sun', 16, isOnTodaysPlan(item) ? 'icon-filled' : ''),
+            onclick: () => onPlan(item),
+          })
+        : null,
+      onUnplan ? el('button', { class: 'icon-btn', title: "Remove from Today's Plan", html: iconSvg('x', 16), onclick: () => onUnplan(item) }) : null,
       onSomeday ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: () => onSomeday(item) }) : null,
       onEdit ? el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => onEdit(item) }) : null,
       onDelete ? el('button', { class: 'icon-btn', title: 'Delete', html: iconSvg('trash', 16), onclick: () => onDelete(item) }) : null,
@@ -373,6 +399,105 @@ export async function renderClarify() {
   } }, 'Skip for now'));
 }
 
+// ------------------------------------------------------- TODAY'S PLAN ---
+export async function renderTodaysPlan() {
+  const allItems = await DB.getByIndex('items', 'type', 'next-action');
+  const planned = allItems.filter(isOnTodaysPlan);
+  // Completed items stay visible only for the day they were finished.
+  const doneToday = allItems.filter((i) => i.completed && i.plannedDate && isToday(i.completedAt));
+  const projects = await DB.getAll('projects');
+  const today = localDateKey();
+  const r = root();
+  r.innerHTML = '';
+  const again = () => refresh(renderTodaysPlan);
+
+  r.appendChild(
+    pageHeader("Today's Plan", 'What you are committing to today. Unfinished items carry over to tomorrow.', [
+      el('button', { class: 'btn btn-ghost', onclick: () => openPlanPicker(allItems.filter((i) => !i.completed && !isOnTodaysPlan(i)), again) }, iconLabel('sun', 'Add from Next Actions')),
+      el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'next-action', defaults: { context: 'Today', plannedDate: today }, onSaved: again }) }, iconLabel('plus', 'Add action')),
+    ])
+  );
+
+  if (!planned.length && !doneToday.length) {
+    r.appendChild(emptyState("Nothing planned yet. Use “Add from Next Actions”, tap the sun icon on any next action, or add a new one here."));
+    return;
+  }
+
+  const rowFor = (item, open) => {
+    const proj = projects.find((p) => p.id === item.projectId);
+    const carried = open && item.plannedDate < today;
+    return itemRow(item, {
+      meta: [item.context, carried ? 'Carried over from ' + formatDate(item.plannedDate) : ''].filter(Boolean).join(' · ') || null,
+      projectLabel: proj || null,
+      onComplete: async (it) => {
+        await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
+        again();
+      },
+      onImportant: open ? (it) => toggleImportant(it, again) : null,
+      onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: again }),
+      // Removes from the plan only; the action itself stays in Next Actions.
+      onUnplan: open ? (it) => setPlanned(it, false).then(again) : null,
+    });
+  };
+
+  if (planned.length) {
+    const sorted = [...planned].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
+    r.appendChild(el('h3', { class: 'group-heading' }, `To do (${planned.length})`));
+    r.appendChild(el('div', { class: 'list' }, sorted.map((i) => rowFor(i, true))));
+  }
+  if (doneToday.length) {
+    r.appendChild(el('h3', { class: 'group-heading' }, `Done today (${doneToday.length})`));
+    r.appendChild(el('div', { class: 'list' }, doneToday.map((i) => rowFor(i, false))));
+  }
+}
+
+// Modal for pulling existing open next actions onto today's plan.
+function openPlanPicker(candidates, onDone) {
+  const form = el('form', { class: 'form' });
+  form.appendChild(el('h3', {}, "Add to Today's Plan"));
+  if (!candidates.length) {
+    form.appendChild(el('p', {}, 'Every open next action is already on today’s plan.'));
+    form.appendChild(el('div', { class: 'form-actions' }, [el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Close')]));
+    openModal(form);
+    return;
+  }
+  const search = el('input', { type: 'search', placeholder: 'Filter…' });
+  const list = el('div', { class: 'list' });
+  const rows = [...candidates]
+    .sort((a, b) => (a.context || '⁣').localeCompare(b.context || '⁣') || a.title.localeCompare(b.title))
+    .map((item) => {
+      const box = el('input', { type: 'checkbox', value: item.id });
+      const row = el('label', { class: 'item-row' }, [
+        box,
+        el('div', { class: 'item-main' }, [
+          el('div', { class: 'item-title' }, item.title),
+          item.context ? el('div', { class: 'item-meta' }, item.context) : null,
+        ].filter(Boolean)),
+      ]);
+      list.appendChild(row);
+      return { item, box, row };
+    });
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    rows.forEach(({ item, row }) => { row.style.display = !q || (item.title + ' ' + (item.context || '')).toLowerCase().includes(q) ? '' : 'none'; });
+  });
+  form.appendChild(search);
+  form.appendChild(el('div', { style: 'max-height:50vh;overflow:auto;margin:8px 0' }, [list]));
+  form.appendChild(el('div', { class: 'form-actions' }, [
+    el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+    el('button', { type: 'submit', class: 'btn btn-primary' }, 'Add selected'),
+  ]));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const chosen = rows.filter((x) => x.box.checked);
+    for (const { item } of chosen) await setPlanned(item, true);
+    closeModal();
+    if (chosen.length) toast(`Added ${chosen.length} to Today's Plan`);
+    onDone();
+  });
+  openModal(form);
+}
+
 // --------------------------------------------------------- NEXT ACTIONS ---
 export async function renderNextActions() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
@@ -457,6 +582,7 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
+            onPlan: (it) => setPlanned(it, !isOnTodaysPlan(it)).then(() => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
             onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
@@ -495,6 +621,7 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
+            onPlan: (it) => setPlanned(it, !isOnTodaysPlan(it)).then(() => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
             onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
