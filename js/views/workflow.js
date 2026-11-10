@@ -47,8 +47,50 @@ export function isOnTodaysPlan(item) {
 export function isDailyDone(item) {
   return item.lastCompletedDate === localDateKey();
 }
+// Manual ordering on Today's Plan: records carry a numeric planOrder. Items
+// that have none (newly planned) sort after ordered ones, by the list's
+// default rule. Planning/unplanning clears planOrder so a stale position
+// from an earlier day can't make a re-planned item jump to the top.
+function sortByPlanOrder(list, fallback) {
+  return [...list].sort((a, b) => {
+    const ao = a.planOrder ?? Infinity;
+    const bo = b.planOrder ?? Infinity;
+    return ao !== bo ? (ao < bo ? -1 : 1) : fallback(a, b);
+  });
+}
+// Swaps `item` with its neighbour in the displayed `list` (dir -1 up, +1
+// down). The whole list is renumbered 0..n-1 first so the saved order always
+// matches what's on screen; only records whose number changed are written.
+async function movePlanItem(list, item, dir, store, onDone) {
+  const i = list.findIndex((x) => x.id === item.id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  const next = [...list];
+  [next[i], next[j]] = [next[j], next[i]];
+  for (let k = 0; k < next.length; k++) {
+    if (next[k].planOrder !== k) await DB.put(store, { ...next[k], planOrder: k });
+  }
+  onDone();
+}
+// Builds { onMoveUp, onMoveDown } for row `item` within displayed `list`.
+function moveHandlers(list, item, store, onDone) {
+  const i = list.findIndex((x) => x.id === item.id);
+  return {
+    onMoveUp: i > 0 ? () => movePlanItem(list, item, -1, store, onDone) : null,
+    onMoveDown: i >= 0 && i < list.length - 1 ? () => movePlanItem(list, item, 1, store, onDone) : null,
+    reorderable: list.length > 1,
+  };
+}
+function moveButtons({ onMoveUp, onMoveDown, reorderable }) {
+  if (!reorderable) return [];
+  return [
+    el('button', { class: 'icon-btn move-btn', title: 'Move up', 'aria-label': 'Move up', disabled: !onMoveUp, html: iconSvg('chevronUp', 16), onclick: onMoveUp || undefined }),
+    el('button', { class: 'icon-btn move-btn', title: 'Move down', 'aria-label': 'Move down', disabled: !onMoveDown, html: iconSvg('chevronDown', 16), onclick: onMoveDown || undefined }),
+  ];
+}
+
 async function setPlanned(item, planned) {
-  await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null });
+  await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null, planOrder: null });
 }
 // A whole project can be on today's plan too (same plannedDate field on the
 // project record, same carry-over behaviour). Only live projects count —
@@ -57,7 +99,7 @@ export function isProjectOnTodaysPlan(project) {
   return (project.status === 'active' || project.status === 'on-hold') && !!project.plannedDate && project.plannedDate <= localDateKey();
 }
 async function setProjectPlanned(project, planned) {
-  await DB.put('projects', { ...project, plannedDate: planned ? localDateKey() : null });
+  await DB.put('projects', { ...project, plannedDate: planned ? localDateKey() : null, planOrder: null });
 }
 
 function pageHeader(title, subtitle, actions = []) {
@@ -75,7 +117,7 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onPlan, onUnplan, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onPlan, onUnplan, move, meta, projectLabel } = {}) {
   return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
@@ -91,6 +133,7 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
+      ...(move ? moveButtons(move) : []),
       onImportant
         ? el('button', {
             class: 'icon-btn' + (item.important ? ' important-active' : ''),
@@ -420,13 +463,13 @@ export async function renderClarify() {
 export async function renderTodaysPlan() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
   const projects = await DB.getAll('projects');
-  const plannedProjects = projects.filter(isProjectOnTodaysPlan).sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
+  const plannedProjects = sortByPlanOrder(projects.filter(isProjectOnTodaysPlan), (a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
   const plannedProjectIds = new Set(plannedProjects.map((p) => p.id));
   // Actions of a planned project are shown inside that project's card, so
   // they're left out of the flat "To do" list to avoid listing them twice.
   const planned = allItems.filter((i) => isOnTodaysPlan(i) && !plannedProjectIds.has(i.projectId));
   // Completed items stay visible only for the day they were finished.
-  const dailies = (await DB.getByIndex('items', 'type', 'daily')).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const dailies = sortByPlanOrder(await DB.getByIndex('items', 'type', 'daily'), (a, b) => a.createdAt.localeCompare(b.createdAt));
   const doneToday = allItems.filter((i) => i.completed && i.plannedDate && isToday(i.completedAt));
   const today = localDateKey();
   const r = root();
@@ -446,12 +489,13 @@ export async function renderTodaysPlan() {
     return;
   }
 
-  const rowFor = (item, open) => {
+  const rowFor = (item, open, move = null) => {
     const proj = projects.find((p) => p.id === item.projectId);
     const carried = open && item.plannedDate < today;
     return itemRow(item, {
       meta: [item.context, carried ? 'Carried over from ' + formatDate(item.plannedDate) : ''].filter(Boolean).join(' · ') || null,
       projectLabel: proj || null,
+      move,
       onComplete: async (it) => {
         await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
         again();
@@ -470,6 +514,7 @@ export async function renderTodaysPlan() {
       const done = isDailyDone(d);
       return itemRow({ ...d, completed: done }, {
         meta: 'Repeats every day',
+        move: moveHandlers(dailies, d, 'items', again),
         onComplete: async () => { await DB.put('items', { ...d, lastCompletedDate: done ? null : today }); again(); },
         onEdit: () => openItemForm({ item: d, type: 'daily', onSaved: again }),
         onDelete: async () => { if (await confirmModal(`Delete the daily item "${d.title}"? It will stop repeating.`)) { await DB.remove('items', d.id); again(); } },
@@ -480,7 +525,7 @@ export async function renderTodaysPlan() {
     r.appendChild(el('h3', { class: 'group-heading' }, `Projects (${plannedProjects.length})`));
     r.appendChild(el('div', { class: 'list' }, plannedProjects.map((p) => {
       const open = allItems.filter((i) => i.projectId === p.id && !i.completed);
-      const sortedOpen = [...open].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.title.localeCompare(b.title));
+      const sortedOpen = sortByPlanOrder(open, (a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.title.localeCompare(b.title));
       const carried = p.plannedDate < today;
       return el('div', { class: 'plan-project' }, [
         el('div', { class: 'item-row plan-project-head' }, [
@@ -490,6 +535,7 @@ export async function renderTodaysPlan() {
             carried ? el('div', { class: 'item-meta' }, 'Carried over from ' + formatDate(p.plannedDate)) : null,
           ].filter(Boolean)),
           el('div', { class: 'item-actions' }, [
+            ...moveButtons(moveHandlers(plannedProjects, p, 'projects', again)),
             el('button', { class: 'btn btn-ghost btn-small', onclick: () => openItemForm({ type: 'next-action', defaults: { projectId: p.id }, onSaved: again }) }, iconLabel('plus', 'Add action', 13)),
             el('button', { class: 'btn btn-ghost btn-small', onclick: () => completeProject(p, again) }, iconLabel('checkCircle', 'Complete project', 13)),
             el('button', { class: 'icon-btn', title: "Remove project from Today's Plan", html: iconSvg('x', 16), onclick: () => setProjectPlanned(p, false).then(again) }),
@@ -498,6 +544,7 @@ export async function renderTodaysPlan() {
         el('div', { class: 'plan-project-actions' }, sortedOpen.length
           ? sortedOpen.map((item) => itemRow(item, {
               meta: item.context || null,
+              move: moveHandlers(sortedOpen, item, 'items', again),
               onComplete: async (it) => {
                 await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
                 again();
@@ -510,9 +557,9 @@ export async function renderTodaysPlan() {
     })));
   }
   if (planned.length) {
-    const sorted = [...planned].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
+    const sorted = sortByPlanOrder(planned, (a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
     r.appendChild(el('h3', { class: 'group-heading' }, `To do (${planned.length})`));
-    r.appendChild(el('div', { class: 'list' }, sorted.map((i) => rowFor(i, true))));
+    r.appendChild(el('div', { class: 'list' }, sorted.map((i) => rowFor(i, true, moveHandlers(sorted, i, 'items', again)))));
   }
   if (doneToday.length) {
     r.appendChild(el('h3', { class: 'group-heading' }, `Done today (${doneToday.length})`));

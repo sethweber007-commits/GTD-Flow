@@ -24,6 +24,7 @@ const ICONS = {
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronUp: '<path d="m6 15 6-6 6 6"/>',
   download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
   menu: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
   cloud: '<path d="M7 18a4 4 0 1 1 .7-7.94A5.5 5.5 0 0 1 18 12.5a3.5 3.5 0 0 1-.4 5.5H7Z"/>',
