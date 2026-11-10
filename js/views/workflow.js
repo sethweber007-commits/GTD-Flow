@@ -39,6 +39,14 @@ export function localDateKey(d = new Date()) {
 export function isOnTodaysPlan(item) {
   return item.type === 'next-action' && !item.completed && !!item.plannedDate && item.plannedDate <= localDateKey();
 }
+// Daily items (type 'daily') recur every day on Today's Plan and live only
+// there — they're not Next Actions. "Done" is just lastCompletedDate ===
+// today, so they reset on their own at midnight with no sweep. They never
+// get `completed: true`, which keeps cleanup.js (it prunes completed items
+// after a month) from ever deleting them.
+export function isDailyDone(item) {
+  return item.lastCompletedDate === localDateKey();
+}
 async function setPlanned(item, planned) {
   await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null });
 }
@@ -404,6 +412,7 @@ export async function renderTodaysPlan() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
   const planned = allItems.filter(isOnTodaysPlan);
   // Completed items stay visible only for the day they were finished.
+  const dailies = (await DB.getByIndex('items', 'type', 'daily')).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const doneToday = allItems.filter((i) => i.completed && i.plannedDate && isToday(i.completedAt));
   const projects = await DB.getAll('projects');
   const today = localDateKey();
@@ -414,11 +423,12 @@ export async function renderTodaysPlan() {
   r.appendChild(
     pageHeader("Today's Plan", 'What you are committing to today. Unfinished items carry over to tomorrow.', [
       el('button', { class: 'btn btn-ghost', onclick: () => openPlanPicker(allItems.filter((i) => !i.completed && !isOnTodaysPlan(i)), again) }, iconLabel('sun', 'Add from Next Actions')),
+      el('button', { class: 'btn btn-ghost', onclick: () => openItemForm({ type: 'daily', onSaved: again }) }, iconLabel('refresh', 'Add daily item')),
       el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'next-action', defaults: { context: 'Today', plannedDate: today }, onSaved: again }) }, iconLabel('plus', 'Add action')),
     ])
   );
 
-  if (!planned.length && !doneToday.length) {
+  if (!planned.length && !doneToday.length && !dailies.length) {
     r.appendChild(emptyState("Nothing planned yet. Use “Add from Next Actions”, tap the sun icon on any next action, or add a new one here."));
     return;
   }
@@ -440,6 +450,19 @@ export async function renderTodaysPlan() {
     });
   };
 
+  if (dailies.length) {
+    const left = dailies.filter((d) => !isDailyDone(d)).length;
+    r.appendChild(el('h3', { class: 'group-heading' }, `Daily (${dailies.length - left}/${dailies.length} done)`));
+    r.appendChild(el('div', { class: 'list' }, dailies.map((d) => {
+      const done = isDailyDone(d);
+      return itemRow({ ...d, completed: done }, {
+        meta: 'Repeats every day',
+        onComplete: async () => { await DB.put('items', { ...d, lastCompletedDate: done ? null : today }); again(); },
+        onEdit: () => openItemForm({ item: d, type: 'daily', onSaved: again }),
+        onDelete: async () => { if (await confirmModal(`Delete the daily item "${d.title}"? It will stop repeating.`)) { await DB.remove('items', d.id); again(); } },
+      });
+    })));
+  }
   if (planned.length) {
     const sorted = [...planned].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
     r.appendChild(el('h3', { class: 'group-heading' }, `To do (${planned.length})`));

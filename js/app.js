@@ -11,6 +11,7 @@ import {
   renderNextActions,
   renderTodaysPlan,
   isOnTodaysPlan,
+  isDailyDone,
   renderProjects,
   renderProjectDetail,
   renderWaitingFor,
@@ -122,15 +123,16 @@ function paintBadge(id, count) {
 // (same "pending" set renderSchedule shows above the fold) — Next Actions
 // no longer factor in, since they don't show up on the Calendar page.
 async function updateNavBadges() {
-  const [inboxItems, allActions, waitingItems, projects, calendarItems] = await Promise.all([
+  const [inboxItems, allActions, waitingItems, projects, calendarItems, dailyItems] = await Promise.all([
     DB.getByIndex('items', 'type', 'inbox'),
     DB.getByIndex('items', 'type', 'next-action'),
     DB.getByIndex('items', 'type', 'waiting-for'),
     DB.getAll('projects'),
     DB.getByIndex('items', 'type', 'calendar'),
+    DB.getByIndex('items', 'type', 'daily'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
-  paintBadge('todays-plan-badge', allActions.filter(isOnTodaysPlan).length);
+  paintBadge('todays-plan-badge', allActions.filter(isOnTodaysPlan).length + dailyItems.filter((d) => !isDailyDone(d)).length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);

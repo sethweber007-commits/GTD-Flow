@@ -465,6 +465,7 @@ function labelFor(type) {
     {
       inbox: 'inbox item',
       'next-action': 'next action',
+      daily: 'daily item',
       'waiting-for': 'waiting on',
       someday: 'someday/maybe',
       calendar: 'schedule item',
