@@ -338,7 +338,6 @@ export async function renderClarify() {
     } else if (state.step === 'new-item-menu') {
       card.appendChild(question('What kind of new item?', [
         [['checkCircle', 'Action'], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true)],
-        [['sun', "Action for today's plan"], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action', plannedDate: localDateKey(), planOrder: null }); }, true)],
         [['folder', 'Project'], () => { state.step = 'new-project'; renderStep(); }],
         [['clock', 'Waiting on'], () => { state.step = 'new-waiting'; renderStep(); }],
       ]));
@@ -392,9 +391,6 @@ export async function renderClarify() {
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
           await DB.put('items', { ...current, type: 'next-action', projectId: select.value });
         }, true)) }, iconLabel('checkCircle', 'Action', 16)),
-        el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
-          await DB.put('items', { ...current, type: 'next-action', projectId: select.value, plannedDate: localDateKey(), planOrder: null });
-        }, true)) }, iconLabel('sun', "Action for today's plan", 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); }) }, iconLabel('clock', 'Waiting on', 16)),
         el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
           await DB.put('items', { ...current, type: 'project-note', projectId: select.value });

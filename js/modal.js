@@ -125,6 +125,9 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     // trip back to the star icon after saving.
     type === 'next-action' ? importantToggleField(data.important || false) : null,
 
+    // One-tap way onto the Daily section (Today's Plan) from the details form.
+    type === 'next-action' ? planToggleField(isOnPlan(data)) : null,
+
     type === 'someday'
       ? field('Category (optional)', sectionFieldEl(sections, data.sectionId))
       : null,
@@ -178,6 +181,12 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
     if (fd.has('tickleDate')) record.tickleDate = fd.get('tickleDate') ? new Date(fd.get('tickleDate')).toISOString() : null;
     if (fd.has('category')) record.category = fd.get('category') || '';
     if (record.type === 'next-action') record.important = fd.get('important') === 'on';
+    // Only touch plannedDate when the toggle was actually changed, so a
+    // carried-over date (planned on an earlier day) isn't reset on every save.
+    if (record.type === 'next-action' && (fd.get('planned') === 'on') !== isOnPlan(data)) {
+      record.plannedDate = fd.get('planned') === 'on' ? localDay() : null;
+      record.planOrder = null;
+    }
 
     try {
       if (isEdit) {
@@ -359,6 +368,29 @@ function field(labelText, inputEl) {
 // the same star icon used to toggle it from the Next Actions list. Keeps
 // a hidden checkbox named "important" so the surrounding <form>'s
 // FormData submission (see openItemForm's submit handler) needs no changes.
+function localDay() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Same rule as isOnTodaysPlan() in views/workflow.js (not imported: circular).
+function isOnPlan(item) {
+  return !!item.plannedDate && !item.completed && item.plannedDate <= localDay();
+}
+function planToggleField(checked) {
+  const input = el('input', { type: 'checkbox', name: 'planned', checked, hidden: true });
+  const icon = el('span', { class: 'important-toggle-icon', html: iconSvg('sun', 18, checked ? 'icon-filled' : '') });
+  const row = el('button', { type: 'button', class: 'field field-checkbox important-toggle' + (checked ? ' important-active' : '') }, [
+    icon,
+    el('span', {}, "Add to Today's Plan"),
+    input,
+  ]);
+  row.addEventListener('click', () => {
+    input.checked = !input.checked;
+    row.classList.toggle('important-active', input.checked);
+    icon.innerHTML = iconSvg('sun', 18, input.checked ? 'icon-filled' : '');
+  });
+  return row;
+}
 function importantToggleField(checked) {
   const input = el('input', { type: 'checkbox', name: 'important', checked, hidden: true });
   const icon = el('span', { class: 'important-toggle-icon', html: iconSvg('star', 18, checked ? 'icon-filled' : '') });
