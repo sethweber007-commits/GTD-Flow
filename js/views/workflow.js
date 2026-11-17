@@ -233,8 +233,8 @@ export async function renderInbox() {
 // modal.js's distinctCategories(), which sorts alphabetically for the item
 // editor's <datalist>; this one is recency-ordered and capped, since it's
 // meant to surface a short "what you just filed" set rather than every
-// category that's ever existed. Capped at 6 to match the 1–6 keyboard shortcuts.
-async function recentReferenceCategories(limit = 6) {
+// category that's ever existed. Capped at 7; only the first 6 get 1–6 keyboard shortcuts.
+async function recentReferenceCategories(limit = 7) {
   const refItems = (await DB.getByIndex('items', 'type', 'reference')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const seen = [];
   for (const item of refItems) {
@@ -476,18 +476,18 @@ export async function renderClarify() {
   function recentReferencePanel() {
     return el('div', { class: 'clarify-recent-panel' }, [
       el('p', { class: 'clarify-recent-heading' }, 'File as Reference — recent categories'),
-      el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.slice(0, 6).map((cat, i) => {
-        const key = String(i + 1);
+      el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.map((cat, i) => {
+        const key = i < 6 ? String(i + 1) : null;
         const fn = () => finish(async () => { await DB.put('items', { ...current, type: 'reference', category: cat }); });
-        bindKey(key, fn);
+        if (key) bindKey(key, fn);
         return el('button', {
           class: 'btn btn-choice btn-choice-compact',
-          title: `File as Reference in "${cat}" (${key})`,
-          'aria-keyshortcuts': key,
+          title: `File as Reference in "${cat}"` + (key ? ` (${key})` : ""),
+          'aria-keyshortcuts': key || undefined,
           onclick: fn,
         }, [
           el('span', { class: 'choice-text' }, [el('span', { class: 'choice-icon', html: iconSvg('book', 16) }), ' ' + cat]),
-          hint(key),
+          key ? hint(key) : null,
         ]);
       })),
     ]);
