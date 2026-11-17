@@ -233,7 +233,7 @@ export async function renderInbox() {
 // modal.js's distinctCategories(), which sorts alphabetically for the item
 // editor's <datalist>; this one is recency-ordered and capped, since it's
 // meant to surface a short "what you just filed" set rather than every
-// category that's ever existed. Capped at 7; only the first 6 get 1–6 keyboard shortcuts.
+// category that's ever existed. Capped at 7 to match the 1–7 keyboard shortcuts.
 async function recentReferenceCategories(limit = 7) {
   const refItems = (await DB.getByIndex('items', 'type', 'reference')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const seen = [];
@@ -477,7 +477,7 @@ export async function renderClarify() {
     return el('div', { class: 'clarify-recent-panel' }, [
       el('p', { class: 'clarify-recent-heading' }, 'File as Reference — recent categories'),
       el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.map((cat, i) => {
-        const key = i < 6 ? String(i + 1) : null;
+        const key = String(i + 1);
         const fn = () => finish(async () => { await DB.put('items', { ...current, type: 'reference', category: cat }); });
         if (key) bindKey(key, fn);
         return el('button', {
