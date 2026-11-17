@@ -43,7 +43,7 @@ a folder in your own Google Drive.
   for grouping ideas, and a "Export .md" button to save the whole list as a
   Markdown file.
 - **Calendar** — a plain checklist of things you intend to put on your own
-  Google Calendar: standalone items added from Clarify's "Schedule" step or
+  Google Calendar: standalone items added from Clarify's "Calendar" step or
   the Calendar page itself. Next Actions are a separate list and don't show
   up here automatically. Add an item to Google Calendar yourself and check
   it off here as your record that it's done. There's no Google Calendar API

@@ -233,8 +233,8 @@ export async function renderInbox() {
 // modal.js's distinctCategories(), which sorts alphabetically for the item
 // editor's <datalist>; this one is recency-ordered and capped, since it's
 // meant to surface a short "what you just filed" set rather than every
-// category that's ever existed.
-async function recentReferenceCategories(limit = 7) {
+// category that's ever existed. Capped at 6 to match the 1–6 keyboard shortcuts.
+async function recentReferenceCategories(limit = 6) {
   const refItems = (await DB.getByIndex('items', 'type', 'reference')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const seen = [];
   for (const item of refItems) {
@@ -243,6 +243,11 @@ async function recentReferenceCategories(limit = 7) {
   }
   return seen;
 }
+
+// The document-level keydown listener for Clarify's keyboard shortcuts.
+// Module scope so each re-render (refresh(renderClarify)) can remove the
+// previous listener before adding a new one, instead of stacking them.
+let clarifyKeyHandler = null;
 
 export async function renderClarify() {
   const items = (await DB.getByIndex('items', 'type', 'inbox')).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -260,6 +265,45 @@ export async function renderClarify() {
   const current = items[0];
   const card = el('div', { class: 'clarify-card' });
   const state = { step: 'menu', projectId: null };
+
+  // Keyboard shortcuts for whichever step is showing. Rebuilt on every
+  // renderStep(): buttons register themselves via choiceBtn()/bindKey() as
+  // they're created, so the badge shown and the key that fires can't drift.
+  let keymap = {};
+  function bindKey(key, fn) { keymap[key.toLowerCase()] = fn; }
+  function hint(key) {
+    return el('kbd', { class: 'key-hint', 'aria-hidden': 'true' }, key.length === 1 ? key.toUpperCase() : key);
+  }
+  function choiceBtn(cls, content, key, fn) {
+    bindKey(key, fn);
+    return el('button', { class: cls, onclick: fn, 'aria-keyshortcuts': key }, [
+      el('span', { class: 'choice-text' }, content),
+      hint(key),
+    ]);
+  }
+
+  if (clarifyKeyHandler) document.removeEventListener('keydown', clarifyKeyHandler);
+  clarifyKeyHandler = (e) => {
+    // Left over from a previous visit to this page — the card is gone.
+    if (!card.isConnected) {
+      document.removeEventListener('keydown', clarifyKeyHandler);
+      clarifyKeyHandler = null;
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    // An item editor opened on top of Clarify owns the keyboard.
+    if (document.querySelector('.modal-backdrop')) return;
+    const t = e.target;
+    if (t && t.matches && t.matches('input, textarea, select, [contenteditable="true"]')) {
+      // Typing in a field: letters are text. Escape just leaves the field so
+      // the shortcuts work again (a second Escape then goes Back).
+      if (e.key === 'Escape') t.blur();
+      return;
+    }
+    const fn = keymap[e.key.toLowerCase()];
+    if (fn) { e.preventDefault(); fn(); }
+  };
+  document.addEventListener('keydown', clarifyKeyHandler);
 
   function projectTitle(id) {
     return projects.find((p) => p.id === id)?.title || '';
@@ -312,6 +356,7 @@ export async function renderClarify() {
 
   function renderStep() {
     card.innerHTML = '';
+    keymap = {};
     card.appendChild(el('div', { class: 'clarify-item' }, [
       el('div', { class: 'clarify-item-toprow' }, [
         el('div', { class: 'clarify-count' }, `Item 1 of ${items.length}`),
@@ -327,29 +372,29 @@ export async function renderClarify() {
       card.classList.toggle('clarify-card--wide', recentCategories.length > 0);
       card.appendChild(el('div', { class: 'clarify-menu-row' }, [
         question('What is this?', [
-          [['plus', 'New item'], () => { state.step = 'new-item-menu'; renderStep(); }],
-          [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }],
-          [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true)],
-          [['moon', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true)],
-          [['calendar', 'Schedule'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true)],
+          [['plus', 'New item'], () => { state.step = 'new-item-menu'; renderStep(); }, 'n'],
+          [['folder', 'Add to project'], () => { state.step = projects.length ? 'project-menu' : 'no-projects'; renderStep(); }, 'a'],
+          [['book', 'Reference'], () => finish(async () => { await DB.put('items', { ...current, type: 'reference' }); }, true, true), 'r'],
+          [['moon', 'Someday/Maybe'], () => finish(async () => { await DB.put('items', { ...current, type: 'someday' }); }, true, true), 's'],
+          [['calendar', 'Calendar'], () => finish(async () => { await DB.put('items', { ...current, type: 'calendar' }); }, true), 'c'],
         ]),
         recentCategories.length ? recentReferencePanel() : null,
       ].filter(Boolean)));
     } else if (state.step === 'new-item-menu') {
       card.appendChild(question('What kind of new item?', [
-        [['checkCircle', 'Action'], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true)],
-        [['folder', 'Project'], () => { state.step = 'new-project'; renderStep(); }],
-        [['clock', 'Waiting on'], () => { state.step = 'new-waiting'; renderStep(); }],
+        [['checkCircle', 'Action'], () => finish(async () => { await DB.put('items', { ...current, type: 'next-action' }); }, true), 'a'],
+        [['folder', 'Project'], () => { state.step = 'new-project'; renderStep(); }, 'p'],
+        [['clock', 'Waiting on'], () => { state.step = 'new-waiting'; renderStep(); }, 'w'],
       ]));
       card.appendChild(backBtn(() => { state.step = 'menu'; renderStep(); }));
     } else if (state.step === 'new-project') {
       card.appendChild(el('p', {}, `This becomes a new project called "${current.title}". Add its first next action now, or do that later from Projects.`));
       card.appendChild(el('div', { class: 'clarify-options' }, [
-        el('button', { class: 'btn btn-choice btn-choice-primary', onclick: async () => {
+        choiceBtn('btn btn-choice btn-choice-primary', iconLabel('plus', 'Create project & add next action', 16), 'c', async () => {
           const project = await createProjectFromCurrent();
           openItemForm({ type: 'next-action', defaults: { projectId: project.id }, onSaved: () => refresh(renderClarify) });
-        } }, iconLabel('plus', 'Create project & add next action', 16)),
-        el('button', { class: 'btn btn-choice', onclick: () => createProjectFromCurrent() }, 'Create project only — I’ll add tasks later'),
+        }),
+        choiceBtn('btn btn-choice', 'Create project only — I’ll add tasks later', 'o', () => createProjectFromCurrent()),
       ]));
       card.appendChild(backBtn(() => { state.step = 'new-item-menu'; renderStep(); }));
     } else if (state.step === 'new-waiting') {
@@ -359,7 +404,7 @@ export async function renderClarify() {
     } else if (state.step === 'no-projects') {
       card.appendChild(el('p', {}, `You don't have any projects yet.`));
       card.appendChild(el('div', { class: 'clarify-options' }, [
-        el('button', { class: 'btn btn-choice btn-choice-primary', onclick: () => { state.step = 'new-project'; renderStep(); } }, iconLabel('plus', 'Create a project from this item', 16)),
+        choiceBtn('btn btn-choice btn-choice-primary', iconLabel('plus', 'Create a project from this item', 16), 'c', () => { state.step = 'new-project'; renderStep(); }),
       ]));
       card.appendChild(backBtn(() => { state.step = 'menu'; renderStep(); }));
     } else if (state.step === 'project-menu') {
@@ -371,6 +416,13 @@ export async function renderClarify() {
       // attached to the document (card is already live in the DOM by the
       // time this step is reached — see renderClarify()'s initial render).
       requestAnimationFrame(() => select.focus());
+      // The search box swallows letter keys while focused. Once Enter has
+      // confirmed a project, hand the keyboard back so A / W / I work.
+      // (The picker's own Enter handler has already run by this point.)
+      const searchInput = select.querySelector('input[type="text"]');
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && select.value) searchInput.blur();
+      });
 
       // Requires an actual project pick before proceeding — the field now
       // starts blank instead of defaulting to the first project, so this
@@ -388,13 +440,13 @@ export async function renderClarify() {
       }
 
       card.appendChild(el('div', { class: 'clarify-options' }, [
-        el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
+        choiceBtn('btn btn-choice', iconLabel('checkCircle', 'Action', 16), 'a', withProject(() => finish(async () => {
           await DB.put('items', { ...current, type: 'next-action', projectId: select.value });
-        }, true)) }, iconLabel('checkCircle', 'Action', 16)),
-        el('button', { class: 'btn btn-choice', onclick: withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); }) }, iconLabel('clock', 'Waiting on', 16)),
-        el('button', { class: 'btn btn-choice', onclick: withProject(() => finish(async () => {
+        }, true))),
+        choiceBtn('btn btn-choice', iconLabel('clock', 'Waiting on', 16), 'w', withProject(() => { state.projectId = select.value; state.step = 'project-waiting'; renderStep(); })),
+        choiceBtn('btn btn-choice', iconLabel('info', 'Info', 16), 'i', withProject(() => finish(async () => {
           await DB.put('items', { ...current, type: 'project-note', projectId: select.value });
-        }, true)) }, iconLabel('info', 'Info', 16)),
+        }, true))),
       ]));
       card.appendChild(backBtn(() => { state.step = 'menu'; renderStep(); }));
     } else if (state.step === 'project-waiting') {
@@ -424,30 +476,42 @@ export async function renderClarify() {
   function recentReferencePanel() {
     return el('div', { class: 'clarify-recent-panel' }, [
       el('p', { class: 'clarify-recent-heading' }, 'File as Reference — recent categories'),
-      el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.map((cat) =>
-        el('button', {
+      el('div', { class: 'clarify-options clarify-options-compact' }, recentCategories.slice(0, 6).map((cat, i) => {
+        const key = String(i + 1);
+        const fn = () => finish(async () => { await DB.put('items', { ...current, type: 'reference', category: cat }); });
+        bindKey(key, fn);
+        return el('button', {
           class: 'btn btn-choice btn-choice-compact',
-          title: `File as Reference in "${cat}"`,
-          onclick: () => finish(async () => { await DB.put('items', { ...current, type: 'reference', category: cat }); }),
-        }, [el('span', { class: 'choice-icon', html: iconSvg('book', 16) }), ' ' + cat])
-      )),
+          title: `File as Reference in "${cat}" (${key})`,
+          'aria-keyshortcuts': key,
+          onclick: fn,
+        }, [
+          el('span', { class: 'choice-text' }, [el('span', { class: 'choice-icon', html: iconSvg('book', 16) }), ' ' + cat]),
+          hint(key),
+        ]);
+      })),
     ]);
   }
 
   function question(text, options) {
     return el('div', { class: 'clarify-question' }, [
       el('p', {}, text),
-      el('div', { class: 'clarify-options' }, options.map(([label, fn]) =>
-        el('button', {
-          class: 'btn btn-choice',
-          onclick: fn,
-          html: Array.isArray(label) ? `<span class="choice-icon">${iconSvg(label[0], 16)}</span> ${label[1]}` : label,
-        })
-      )),
+      el('div', { class: 'clarify-options' }, options.map(([label, fn, key]) => {
+        bindKey(key, fn);
+        return el('button', { class: 'btn btn-choice', onclick: fn, 'aria-keyshortcuts': key }, [
+          el('span', {
+            class: 'choice-text',
+            html: `<span class="choice-icon">${iconSvg(label[0], 16)}</span> ${label[1]}`,
+          }),
+          hint(key),
+        ]);
+      })),
     ]);
   }
   function backBtn(fn) {
-    return el('button', { class: 'btn btn-ghost btn-back', onclick: fn }, '← Back');
+    bindKey('escape', fn);
+    bindKey('b', fn);
+    return el('button', { class: 'btn btn-ghost btn-back', onclick: fn, 'aria-keyshortcuts': 'Escape b' }, ['← Back ', hint('Esc')]);
   }
 
   renderStep();
@@ -1270,7 +1334,7 @@ export async function renderSomeday() {
 // connection and nothing is pushed anywhere automatically. You add the
 // event to Google Calendar yourself, then check it off here as your record
 // that it's been scheduled. Only standalone type:'calendar' items appear
-// here (created from this page, or from Clarify's "Schedule" step) — Next
+// here (created from this page, or from Clarify's "Calendar" step) — Next
 // Actions are a separate list and never show up here automatically; put one
 // on the calendar yourself by adding it here if you want a reminder to
 // schedule it.

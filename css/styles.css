@@ -175,8 +175,18 @@ body {
 .btn-danger:hover { background: var(--danger); color: #fff; }
 .btn-small { padding: 5px 10px; font-size: 12.5px; }
 .btn-large { padding: 13px 22px; font-size: 15px; width: 100%; margin-top: 12px; }
-.btn-choice { display: block; width: 100%; text-align: left; margin-bottom: 8px; background: var(--surface); border-color: var(--border); padding: 12px 14px; }
+.btn-choice { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin-bottom: 8px; background: var(--surface); border-color: var(--border); padding: 12px 14px; }
 .btn-choice:hover { border-color: var(--primary); background: var(--primary-light); }
+.choice-text { flex: 1 1 auto; min-width: 0; }
+.key-hint {
+  flex: 0 0 auto; margin-left: auto; min-width: 20px; padding: 1px 6px; text-align: center;
+  font-size: 11px; font-weight: 600; line-height: 1.5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted); background: var(--bg, var(--surface)); border: 1px solid var(--border);
+  border-bottom-width: 2px; border-radius: 5px;
+}
+.btn-back .key-hint { margin-left: 6px; }
+/* Touch devices have no keyboard to use the shortcuts with. */
+@media (hover: none) { .key-hint { display: none; } }
 .btn-choice-primary { background: var(--primary-light); border-color: var(--primary); font-weight: 700; }
 .choice-icon { display: inline-flex; vertical-align: -4px; margin-right: 4px; color: var(--primary); }
 .btn-back { padding: 6px 0; margin-top: 4px; }
