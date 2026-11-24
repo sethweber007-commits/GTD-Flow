@@ -3,7 +3,7 @@
 // (like the Google Drive backup module) react whenever data changes.
 
 const DB_NAME = 'gtd-pwa-db';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const STORES = {
   items: { keyPath: 'id', indexes: ['type', 'context', 'projectId', 'tickleDate', 'calendarDate', 'completed', 'category', 'sectionId'] },
@@ -16,6 +16,8 @@ const STORES = {
   vision: { keyPath: 'id', indexes: [] },
   purpose: { keyPath: 'id', indexes: [] },
   reviews: { keyPath: 'id', indexes: [] },
+  // Flywheel checklists (js/views/workflow.js): one record per checklist line.
+  flywheel: { keyPath: 'id', indexes: [] },
   meta: { keyPath: 'key', indexes: [] },
   // Delete records, kept separately from their original store so a
   // deletion can be told apart from "never existed" when reconciling two

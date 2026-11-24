@@ -55,8 +55,8 @@ a folder in your own Google Drive.
   non-actionable material you want to keep (see *References*, below).
   Marking an inbox item as Reference during Clarify immediately opens the
   editor so you can name its category; also exportable to Markdown.
-- **Weekly Review** — the full classic GTD weekly review checklist (Get
-  Clear / Get Current / Get Creative), with history tracking.
+- **Flywheel** — editable Weekly and Daily checklists. Add, edit,
+  reorder, or delete items; checks stay until you press Reset.
 
 **Horizons of Focus** — condensed into a single tab with each altitude
 level as an expandable section, so you can see the whole picture at once:
@@ -138,7 +138,7 @@ gtd-pwa/
 │   └── views/
 │       ├── workflow.js            Inbox, Clarify, Next Actions, Projects,
 │       │                          Waiting For, Someday, Calendar,
-│       │                          Reference, Weekly Review
+│       │                          Reference, Flywheel
 │       ├── horizons.js             Purpose/Vision/Goals/Areas, one accordion tab
 │       └── settings.js              Drive backup UI, contexts, data tools
 ├── SETUP.md                Hosting + Google Drive OAuth setup (read this first)

@@ -111,7 +111,7 @@ export async function renderSettings() {
       el('p', { class: 'item-notes' }, [
         'An implementation of the Getting Things Done® (GTD®) workflow: Capture, Clarify, Organize, Reflect, Engage — plus the Horizons of Focus for connecting daily actions to bigger-picture goals and purpose. GTD® and Getting Things Done® are registered trademarks of the David Allen Company; this app is an independent, unofficial implementation of the publicly described methodology and is not affiliated with or endorsed by David Allen or the David Allen Company. See ',
         el('strong', {}, 'Reference'),
-        ' in the nav for the classic weekly-review checklist and the in-app filing system this app is modeled on.',
+        ' in the nav for the in-app filing system this app is modeled on.',
       ]),
       el('p', { class: 'item-notes' }, 'All your data lives on this device (IndexedDB) and, if connected, in a folder named "' + CONFIG.DRIVE_BACKUP_FOLDER + '" in your own Google Drive. Nothing is sent to any other server.'),
     ])

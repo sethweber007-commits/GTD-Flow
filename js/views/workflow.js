@@ -26,82 +26,6 @@ let nextActionsCollapsed;
 // collapsed".
 let somedayCollapsed;
 
-// ---- Today's Plan ----------------------------------------------------------
-// A Next Action is "on today's plan" when it carries a plannedDate (local
-// YYYY-MM-DD) that is today or earlier and it isn't completed. Because the
-// plan is just a field on the same item record, the action stays in Next
-// Actions and the two lists can never disagree. Unfinished items keep their
-// old plannedDate, which is what makes them carry over to the next day.
-export function localDateKey(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-export function isOnTodaysPlan(item) {
-  return item.type === 'next-action' && !item.completed && !!item.plannedDate && item.plannedDate <= localDateKey();
-}
-// Daily items (type 'daily') recur every day on Today's Plan and live only
-// there — they're not Next Actions. "Done" is just lastCompletedDate ===
-// today, so they reset on their own at midnight with no sweep. They never
-// get `completed: true`, which keeps cleanup.js (it prunes completed items
-// after a month) from ever deleting them.
-export function isDailyDone(item) {
-  return item.lastCompletedDate === localDateKey();
-}
-// Manual ordering on Today's Plan: records carry a numeric planOrder. Items
-// that have none (newly planned) sort after ordered ones, by the list's
-// default rule. Planning/unplanning clears planOrder so a stale position
-// from an earlier day can't make a re-planned item jump to the top.
-function sortByPlanOrder(list, fallback) {
-  return [...list].sort((a, b) => {
-    const ao = a.planOrder ?? Infinity;
-    const bo = b.planOrder ?? Infinity;
-    return ao !== bo ? (ao < bo ? -1 : 1) : fallback(a, b);
-  });
-}
-// Swaps `item` with its neighbour in the displayed `list` (dir -1 up, +1
-// down). The whole list is renumbered 0..n-1 first so the saved order always
-// matches what's on screen; only records whose number changed are written.
-async function movePlanItem(list, item, dir, store, onDone) {
-  const i = list.findIndex((x) => x.id === item.id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= list.length) return;
-  const next = [...list];
-  [next[i], next[j]] = [next[j], next[i]];
-  for (let k = 0; k < next.length; k++) {
-    if (next[k].planOrder !== k) await DB.put(store, { ...next[k], planOrder: k });
-  }
-  onDone();
-}
-// Builds { onMoveUp, onMoveDown } for row `item` within displayed `list`.
-function moveHandlers(list, item, store, onDone) {
-  const i = list.findIndex((x) => x.id === item.id);
-  return {
-    onMoveUp: i > 0 ? () => movePlanItem(list, item, -1, store, onDone) : null,
-    onMoveDown: i >= 0 && i < list.length - 1 ? () => movePlanItem(list, item, 1, store, onDone) : null,
-    reorderable: list.length > 1,
-  };
-}
-function moveButtons({ onMoveUp, onMoveDown, reorderable }) {
-  if (!reorderable) return [];
-  return [
-    el('button', { class: 'icon-btn move-btn', title: 'Move up', 'aria-label': 'Move up', disabled: !onMoveUp, html: iconSvg('chevronUp', 16), onclick: onMoveUp || undefined }),
-    el('button', { class: 'icon-btn move-btn', title: 'Move down', 'aria-label': 'Move down', disabled: !onMoveDown, html: iconSvg('chevronDown', 16), onclick: onMoveDown || undefined }),
-  ];
-}
-
-async function setPlanned(item, planned) {
-  await DB.put('items', { ...item, plannedDate: planned ? localDateKey() : null, planOrder: null });
-}
-// A whole project can be on today's plan too (same plannedDate field on the
-// project record, same carry-over behaviour). Only live projects count —
-// completing or parking one drops it off the plan without clearing the field.
-export function isProjectOnTodaysPlan(project) {
-  return (project.status === 'active' || project.status === 'on-hold') && !!project.plannedDate && project.plannedDate <= localDateKey();
-}
-async function setProjectPlanned(project, planned) {
-  await DB.put('projects', { ...project, plannedDate: planned ? localDateKey() : null, planOrder: null });
-}
-
 function pageHeader(title, subtitle, actions = []) {
   return el('div', { class: 'page-header' }, [
     el('div', {}, [el('h1', {}, title), subtitle ? el('p', { class: 'subtitle' }, subtitle) : null].filter(Boolean)),
@@ -117,7 +41,7 @@ function iconLabel(icon, text, size = 15) {
   return [el('span', { html: iconSvg(icon, size) }), ' ' + text];
 }
 
-function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, onPlan, onUnplan, move, meta, projectLabel } = {}) {
+function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, meta, projectLabel } = {}) {
   return el('div', { class: 'item-row' + (item.completed ? ' completed' : '') + (item.important ? ' important' : '') }, [
     onComplete
       ? el('input', { type: 'checkbox', checked: item.completed || false, onchange: () => onComplete(item) })
@@ -133,7 +57,6 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
       meta ? el('div', { class: 'item-meta' }, meta) : null,
     ].filter(Boolean)),
     el('div', { class: 'item-actions' }, [
-      ...(move ? moveButtons(move) : []),
       onImportant
         ? el('button', {
             class: 'icon-btn' + (item.important ? ' important-active' : ''),
@@ -142,15 +65,6 @@ function itemRow(item, { onComplete, onEdit, onDelete, onSomeday, onImportant, o
             onclick: () => onImportant(item),
           })
         : null,
-      onPlan
-        ? el('button', {
-            class: 'icon-btn' + (isOnTodaysPlan(item) ? ' plan-active' : ''),
-            title: isOnTodaysPlan(item) ? "Remove from Today's Plan" : "Add to Today's Plan",
-            html: iconSvg('sun', 16, isOnTodaysPlan(item) ? 'icon-filled' : ''),
-            onclick: () => onPlan(item),
-          })
-        : null,
-      onUnplan ? el('button', { class: 'icon-btn', title: "Remove from Today's Plan", html: iconSvg('x', 16), onclick: () => onUnplan(item) }) : null,
       onSomeday ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: () => onSomeday(item) }) : null,
       onEdit ? el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => onEdit(item) }) : null,
       onDelete ? el('button', { class: 'icon-btn', title: 'Delete', html: iconSvg('trash', 16), onclick: () => onDelete(item) }) : null,
@@ -523,183 +437,6 @@ export async function renderClarify() {
   } }, 'Skip for now'));
 }
 
-// ------------------------------------------------------- TODAY'S PLAN ---
-export async function renderTodaysPlan() {
-  const allItems = await DB.getByIndex('items', 'type', 'next-action');
-  const projects = await DB.getAll('projects');
-  const plannedProjects = sortByPlanOrder(projects.filter(isProjectOnTodaysPlan), (a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
-  const plannedProjectIds = new Set(plannedProjects.map((p) => p.id));
-  // Actions of a planned project are shown inside that project's card, so
-  // they're left out of the flat "To do" list to avoid listing them twice.
-  const planned = allItems.filter((i) => isOnTodaysPlan(i) && !plannedProjectIds.has(i.projectId));
-  // Completed items stay visible only for the day they were finished.
-  const dailies = sortByPlanOrder(await DB.getByIndex('items', 'type', 'daily'), (a, b) => a.createdAt.localeCompare(b.createdAt));
-  const doneToday = allItems.filter((i) => i.completed && i.plannedDate && isToday(i.completedAt));
-  const today = localDateKey();
-  const r = root();
-  r.innerHTML = '';
-  const again = () => refresh(renderTodaysPlan);
-
-  r.appendChild(
-    pageHeader("Today's Plan", 'What you are committing to today. Unfinished items carry over to tomorrow.', [
-      el('button', { class: 'btn btn-ghost', onclick: () => openPlanPicker(allItems.filter((i) => !i.completed && !isOnTodaysPlan(i)), projects.filter((p) => (p.status === 'active' || p.status === 'on-hold') && !isProjectOnTodaysPlan(p)), again) }, iconLabel('sun', 'Add to plan')),
-      el('button', { class: 'btn btn-ghost', onclick: () => openItemForm({ type: 'daily', onSaved: again }) }, iconLabel('refresh', 'Add daily item')),
-      el('button', { class: 'btn btn-primary', onclick: () => openItemForm({ type: 'next-action', defaults: { context: 'Today', plannedDate: today }, onSaved: again }) }, iconLabel('plus', 'Add action')),
-    ])
-  );
-
-  if (!planned.length && !doneToday.length && !dailies.length && !plannedProjects.length) {
-    r.appendChild(emptyState("Nothing planned yet. Use “Add to plan”, tap the sun icon on any next action or project, or add a new action here."));
-    return;
-  }
-
-  const rowFor = (item, open, move = null) => {
-    const proj = projects.find((p) => p.id === item.projectId);
-    const carried = open && item.plannedDate < today;
-    return itemRow(item, {
-      meta: [item.context, carried ? 'Carried over from ' + formatDate(item.plannedDate) : ''].filter(Boolean).join(' · ') || null,
-      projectLabel: proj || null,
-      move,
-      onComplete: async (it) => {
-        await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
-        again();
-      },
-      onImportant: open ? (it) => toggleImportant(it, again) : null,
-      onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: again }),
-      // Removes from the plan only; the action itself stays in Next Actions.
-      onUnplan: open ? (it) => setPlanned(it, false).then(again) : null,
-    });
-  };
-
-  if (dailies.length) {
-    const left = dailies.filter((d) => !isDailyDone(d)).length;
-    r.appendChild(el('h3', { class: 'group-heading' }, `Daily (${dailies.length - left}/${dailies.length} done)`));
-    r.appendChild(el('div', { class: 'list' }, dailies.map((d) => {
-      const done = isDailyDone(d);
-      return itemRow({ ...d, completed: done }, {
-        meta: 'Repeats every day',
-        move: moveHandlers(dailies, d, 'items', again),
-        onComplete: async () => { await DB.put('items', { ...d, lastCompletedDate: done ? null : today }); again(); },
-        onEdit: () => openItemForm({ item: d, type: 'daily', onSaved: again }),
-        onDelete: async () => { if (await confirmModal(`Delete the daily item "${d.title}"? It will stop repeating.`)) { await DB.remove('items', d.id); again(); } },
-      });
-    })));
-  }
-  if (plannedProjects.length) {
-    r.appendChild(el('h3', { class: 'group-heading' }, `Projects (${plannedProjects.length})`));
-    r.appendChild(el('div', { class: 'list' }, plannedProjects.map((p) => {
-      const open = allItems.filter((i) => i.projectId === p.id && !i.completed);
-      const sortedOpen = sortByPlanOrder(open, (a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.title.localeCompare(b.title));
-      const carried = p.plannedDate < today;
-      return el('div', { class: 'plan-project' }, [
-        el('div', { class: 'item-row plan-project-head' }, [
-          el('div', { class: 'item-main' }, [
-            el('a', { class: 'item-project-label', href: '#/projects/' + encodeURIComponent(p.id), title: 'Open project' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + p.title]),
-            p.outcome ? el('div', { class: 'item-notes' }, p.outcome) : null,
-            carried ? el('div', { class: 'item-meta' }, 'Carried over from ' + formatDate(p.plannedDate)) : null,
-          ].filter(Boolean)),
-          el('div', { class: 'item-actions' }, [
-            ...moveButtons(moveHandlers(plannedProjects, p, 'projects', again)),
-            el('button', { class: 'btn btn-ghost btn-small', onclick: () => openItemForm({ type: 'next-action', defaults: { projectId: p.id }, onSaved: again }) }, iconLabel('plus', 'Add action', 13)),
-            el('button', { class: 'btn btn-ghost btn-small', onclick: () => completeProject(p, again) }, iconLabel('checkCircle', 'Complete project', 13)),
-            el('button', { class: 'icon-btn', title: "Remove project from Today's Plan", html: iconSvg('x', 16), onclick: () => setProjectPlanned(p, false).then(again) }),
-          ]),
-        ]),
-        el('div', { class: 'plan-project-actions' }, sortedOpen.length
-          ? sortedOpen.map((item) => itemRow(item, {
-              meta: item.context || null,
-              move: moveHandlers(sortedOpen, item, 'items', again),
-              onComplete: async (it) => {
-                await DB.put('items', { ...it, completed: !it.completed, completedAt: !it.completed ? new Date().toISOString() : null });
-                again();
-              },
-              onImportant: (it) => toggleImportant(it, again),
-              onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: again }),
-            }))
-          : [el('div', { class: 'empty-state-small' }, 'No open next action — add one so this project keeps moving.')]),
-      ]);
-    })));
-  }
-  if (planned.length) {
-    const sorted = sortByPlanOrder(planned, (a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || a.plannedDate.localeCompare(b.plannedDate) || a.title.localeCompare(b.title));
-    r.appendChild(el('h3', { class: 'group-heading' }, `To do (${planned.length})`));
-    r.appendChild(el('div', { class: 'list' }, sorted.map((i) => rowFor(i, true, moveHandlers(sorted, i, 'items', again)))));
-  }
-  if (doneToday.length) {
-    r.appendChild(el('h3', { class: 'group-heading' }, `Done today (${doneToday.length})`));
-    r.appendChild(el('div', { class: 'list' }, doneToday.map((i) => rowFor(i, false))));
-  }
-}
-
-// Modal for pulling existing open next actions onto today's plan.
-function openPlanPicker(candidates, projectCandidates, onDone) {
-  const form = el('form', { class: 'form' });
-  form.appendChild(el('h3', {}, "Add to Today's Plan"));
-  if (!candidates.length && !projectCandidates.length) {
-    form.appendChild(el('p', {}, 'Every open next action and project is already on today’s plan.'));
-    form.appendChild(el('div', { class: 'form-actions' }, [el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Close')]));
-    openModal(form);
-    return;
-  }
-  const search = el('input', { type: 'search', placeholder: 'Filter…' });
-  const list = el('div', { class: 'list' });
-  const projectRows = [...projectCandidates]
-    .sort((a, b) => a.title.localeCompare(b.title))
-    .map((project) => {
-      const box = el('input', { type: 'checkbox', value: project.id });
-      const row = el('label', { class: 'item-row' }, [
-        box,
-        el('div', { class: 'item-main' }, [
-          el('div', { class: 'item-title' }, [el('span', { html: iconSvg('folder', 14) }), ' ' + project.title]),
-          el('div', { class: 'item-meta' }, 'Whole project'),
-        ]),
-      ]);
-      return { project, box, row, text: project.title };
-    });
-  if (projectRows.length) {
-    list.appendChild(el('h4', { class: 'group-heading' }, 'Projects'));
-    projectRows.forEach(({ row }) => list.appendChild(row));
-    if (candidates.length) list.appendChild(el('h4', { class: 'group-heading' }, 'Next Actions'));
-  }
-  const rows = [...candidates]
-    .sort((a, b) => (a.context || '⁣').localeCompare(b.context || '⁣') || a.title.localeCompare(b.title))
-    .map((item) => {
-      const box = el('input', { type: 'checkbox', value: item.id });
-      const row = el('label', { class: 'item-row' }, [
-        box,
-        el('div', { class: 'item-main' }, [
-          el('div', { class: 'item-title' }, item.title),
-          item.context ? el('div', { class: 'item-meta' }, item.context) : null,
-        ].filter(Boolean)),
-      ]);
-      list.appendChild(row);
-      return { item, box, row };
-    });
-  search.addEventListener('input', () => {
-    const q = search.value.trim().toLowerCase();
-    rows.forEach(({ item, row }) => { row.style.display = !q || (item.title + ' ' + (item.context || '')).toLowerCase().includes(q) ? '' : 'none'; });
-    projectRows.forEach(({ text, row }) => { row.style.display = !q || text.toLowerCase().includes(q) ? '' : 'none'; });
-  });
-  form.appendChild(search);
-  form.appendChild(el('div', { style: 'max-height:50vh;overflow:auto;margin:8px 0' }, [list]));
-  form.appendChild(el('div', { class: 'form-actions' }, [
-    el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
-    el('button', { type: 'submit', class: 'btn btn-primary' }, 'Add selected'),
-  ]));
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const chosen = rows.filter((x) => x.box.checked);
-    const chosenProjects = projectRows.filter((x) => x.box.checked);
-    for (const { item } of chosen) await setPlanned(item, true);
-    for (const { project } of chosenProjects) await setProjectPlanned(project, true);
-    closeModal();
-    const total = chosen.length + chosenProjects.length;
-    if (total) toast(`Added ${total} to Today's Plan`);
-    onDone();
-  });
-  openModal(form);
-}
-
 // --------------------------------------------------------- NEXT ACTIONS ---
 export async function renderNextActions() {
   const allItems = await DB.getByIndex('items', 'type', 'next-action');
@@ -784,7 +521,6 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
-            onPlan: (it) => setPlanned(it, !isOnTodaysPlan(it)).then(() => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
             onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
@@ -823,7 +559,6 @@ export async function renderNextActions() {
               refresh(renderNextActions);
             },
             onImportant: (it) => toggleImportant(it, () => refresh(renderNextActions)),
-            onPlan: (it) => setPlanned(it, !isOnTodaysPlan(it)).then(() => refresh(renderNextActions)),
             onSomeday: (it) => sendItemToSomeday(it, () => refresh(renderNextActions)),
             onEdit: (it) => openItemForm({ item: it, type: 'next-action', onSaved: () => refresh(renderNextActions) }),
             onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refresh(renderNextActions); } },
@@ -954,14 +689,6 @@ export async function renderProjects() {
             ].filter(Boolean)),
             el('div', { class: 'item-actions' }, [
               status !== 'completed'
-                ? el('button', {
-                    class: 'icon-btn' + (isProjectOnTodaysPlan(p) ? ' plan-active' : ''),
-                    title: isProjectOnTodaysPlan(p) ? "Remove from Today's Plan" : "Add project to Today's Plan",
-                    html: iconSvg('sun', 16, isProjectOnTodaysPlan(p) ? 'icon-filled' : ''),
-                    onclick: stopNav(() => setProjectPlanned(p, !isProjectOnTodaysPlan(p)).then(() => refresh(renderProjects))),
-                  })
-                : null,
-              status !== 'completed'
                 ? el('button', { class: 'icon-btn', title: 'Send to Someday/Maybe', html: iconSvg('moon', 16), onclick: stopNav(() => sendProjectToSomeday(p, () => refresh(renderProjects))) })
                 : null,
             ].filter(Boolean)),
@@ -1022,9 +749,6 @@ export async function renderProjectDetail(id) {
   r.appendChild(
     pageHeader(project.title, project.outcome, [
       project.status !== 'someday' && project.status !== 'completed'
-        ? el('button', { class: 'btn btn-ghost', onclick: () => setProjectPlanned(project, !isProjectOnTodaysPlan(project)).then(refreshMe) }, iconLabel('sun', isProjectOnTodaysPlan(project) ? "Remove from Today's Plan" : "Add to Today's Plan", 14))
-        : null,
-      project.status !== 'someday' && project.status !== 'completed'
         ? el('button', { class: 'btn btn-ghost', onclick: () => sendProjectToSomeday(project, refreshMe) }, iconLabel('moon', 'Send to Someday/Maybe', 14))
         : null,
       project.status !== 'someday' && project.status !== 'completed'
@@ -1075,7 +799,6 @@ export async function renderProjectDetail(id) {
         refreshMe();
       },
       onImportant: (it) => toggleImportant(it, refreshMe),
-      onPlan: item.completed ? null : (x) => setPlanned(x, !isOnTodaysPlan(x)).then(refreshMe),
       onSomeday: (it) => sendItemToSomeday(it, refreshMe),
       onEdit: (it) => openItemForm({ item: it, type: it.type, onSaved: refreshMe }),
       onDelete: async (it) => { if (await confirmModal(`Delete "${it.title}"?`)) { await DB.remove('items', it.id); refreshMe(); } },
@@ -1558,58 +1281,92 @@ export async function renderReference() {
   draw();
 }
 
-// --------------------------------------------------------- WEEKLY REVIEW --
-const REVIEW_STEPS = [
-  { group: 'Get Clear', items: ['Collect loose papers and materials', 'Empty your head — capture anything new into Inbox', 'Process your Inbox to zero', 'Empty your email inbox to zero (or plan to)'] },
-  { group: 'Get Current', items: ['Review Next Actions lists', 'Review previous calendar dates for follow-ups', 'Review upcoming calendar', 'Review Waiting For list — follow up as needed', 'Review Projects list — ensure each has a next action', 'Review any relevant checklists'] },
-  { group: 'Get Creative', items: ['Review Someday/Maybe list — anything to activate?', 'Be creative and courageous — any new ideas to capture?', 'Review Roles, Goals, and Vision for alignment'] },
+// ------------------------------------------------------------- FLYWHEEL --
+// Two user-editable checklists (Weekly and Daily). Each line is its own
+// record in the 'flywheel' store ({ list, text, order, checked }) so edits
+// made on two devices merge item by item during sync. Checks never reset on
+// their own — each list has a manual Reset button.
+const FLYWHEEL_LISTS = [
+  { key: 'weekly', title: 'Weekly Flywheel', empty: 'No weekly items yet. Add the steps you want to run through every week.' },
+  { key: 'daily', title: 'Daily Flywheel', empty: 'No daily items yet. Add the steps you want to run through every day.' },
 ];
 
-export async function renderReview() {
+export async function renderFlywheel() {
   const r = root();
   r.innerHTML = '';
-  const reviews = (await DB.getAll('reviews')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const last = reviews[0];
+  const all = await DB.getAll('flywheel');
+  const again = () => refresh(renderFlywheel);
+  const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || '');
 
-  r.appendChild(pageHeader('Weekly Review', last ? `Last completed ${formatDate(last.createdAt)}` : 'You haven’t completed a review yet.'));
+  r.appendChild(pageHeader('Flywheel', 'Your recurring weekly and daily checklists. Edit the items any time; use Reset to clear the checks.'));
 
-  const checked = new Set();
-  const totalSteps = REVIEW_STEPS.reduce((n, g) => n + g.items.length, 0);
-  const progressEl = el('div', { class: 'review-progress' }, `0 / ${totalSteps} complete`);
-  r.appendChild(progressEl);
+  FLYWHEEL_LISTS.forEach(({ key, title, empty }) => {
+    const items = all.filter((i) => i.list === key).sort(byOrder);
+    const done = items.filter((i) => i.checked).length;
 
-  REVIEW_STEPS.forEach((group) => {
-    r.appendChild(el('h3', { class: 'group-heading' }, group.group));
+    const heading = el('div', { class: 'flywheel-head' }, [
+      el('h3', { class: 'group-heading' }, `${title}${items.length ? ` (${done}/${items.length})` : ''}`),
+      items.length
+        ? el('button', {
+            class: 'btn btn-ghost btn-small',
+            disabled: !done,
+            onclick: async () => {
+              for (const it of items) if (it.checked) await DB.put('flywheel', { ...it, checked: false });
+              again();
+            },
+          }, iconLabel('refresh', 'Reset', 13))
+        : null,
+    ].filter(Boolean));
+    r.appendChild(heading);
+
     const list = el('div', { class: 'list' });
-    group.items.forEach((text) => {
-      const id = group.group + '::' + text;
-      const row = el('label', { class: 'review-item' }, [
-        el('input', { type: 'checkbox', onchange: (e) => {
-          if (e.target.checked) checked.add(id); else checked.delete(id);
-          progressEl.textContent = `${checked.size} / ${totalSteps} complete`;
-        } }),
-        el('span', {}, text),
-      ]);
-      list.appendChild(row);
+    if (!items.length) list.appendChild(el('div', { class: 'empty-state-small' }, empty));
+    items.forEach((it, idx) => {
+      const swap = async (dir) => {
+        const other = items[idx + dir];
+        if (!other) return;
+        const next = [...items];
+        [next[idx], next[idx + dir]] = [next[idx + dir], next[idx]];
+        for (let k = 0; k < next.length; k++) {
+          if (next[k].order !== k) await DB.put('flywheel', { ...next[k], order: k });
+        }
+        again();
+      };
+      list.appendChild(el('div', { class: 'item-row' + (it.checked ? ' completed' : '') }, [
+        el('input', { type: 'checkbox', checked: !!it.checked, onchange: async (e) => { await DB.put('flywheel', { ...it, checked: e.target.checked }); again(); } }),
+        el('div', { class: 'item-main' }, [el('div', { class: 'item-title' }, it.text)]),
+        el('div', { class: 'item-actions' }, [
+          items.length > 1 ? el('button', { class: 'icon-btn move-btn', title: 'Move up', 'aria-label': 'Move up', disabled: idx === 0, html: iconSvg('chevronUp', 16), onclick: () => swap(-1) }) : null,
+          items.length > 1 ? el('button', { class: 'icon-btn move-btn', title: 'Move down', 'aria-label': 'Move down', disabled: idx === items.length - 1, html: iconSvg('chevronDown', 16), onclick: () => swap(1) }) : null,
+          el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openFlywheelForm({ list: key, item: it, onSaved: again }) }),
+          el('button', { class: 'icon-btn', title: 'Delete', html: iconSvg('trash', 16), onclick: async () => { if (await confirmModal(`Delete "${it.text}"?`)) { await DB.remove('flywheel', it.id); again(); } } }),
+        ].filter(Boolean)),
+      ]));
     });
     r.appendChild(list);
+    r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: key, nextOrder: items.length, onSaved: again }) }, iconLabel('plus', 'Add item', 13)));
   });
+}
 
-  r.appendChild(
-    el('button', { class: 'btn btn-primary btn-large', onclick: async () => {
-      await DB.add('reviews', { completedSteps: checked.size, totalSteps });
-      toast('Weekly review saved 🎉');
-      try { await Drive.snapshotNow('weekly-review'); } catch (e) { /* offline is fine */ }
-      refresh(renderReview);
-    } }, iconLabel('checkCircle', 'Mark review complete', 16))
-  );
-
-  if (reviews.length) {
-    r.appendChild(el('h3', { class: 'group-heading' }, 'History'));
-    const hist = el('div', { class: 'list' });
-    reviews.slice(0, 8).forEach((rv) => {
-      hist.appendChild(el('div', { class: 'item-row muted' }, [el('div', { class: 'item-main' }, `${formatDate(rv.createdAt)} — ${rv.completedSteps}/${rv.totalSteps} steps`)]));
-    });
-    r.appendChild(hist);
-  }
+function openFlywheelForm({ list, item = null, nextOrder = 0, onSaved }) {
+  const input = el('input', { type: 'text', name: 'text', required: true, value: item ? item.text : '', placeholder: 'Checklist item…', autofocus: true });
+  const form = el('form', { class: 'form' }, [
+    el('h3', {}, `${item ? 'Edit' : 'Add'} ${list} item`),
+    input,
+    el('div', { class: 'form-actions' }, [
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { type: 'submit', class: 'btn btn-primary' }, 'Save'),
+    ]),
+  ]);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    if (item) await DB.put('flywheel', { ...item, text });
+    else await DB.add('flywheel', { list, text, order: nextOrder, checked: false });
+    closeModal();
+    onSaved();
+  });
+  openModal(form);
+  setTimeout(() => input.focus(), 0);
 }

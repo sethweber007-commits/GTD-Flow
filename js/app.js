@@ -9,17 +9,13 @@ import {
   renderInbox,
   renderClarify,
   renderNextActions,
-  renderTodaysPlan,
-  isOnTodaysPlan,
-  isProjectOnTodaysPlan,
-  isDailyDone,
   renderProjects,
   renderProjectDetail,
   renderWaitingFor,
   renderSomeday,
   renderSchedule,
   renderReference,
-  renderReview,
+  renderFlywheel,
 } from './views/workflow.js';
 import { renderGoals } from './views/goals.js';
 import { renderHorizons } from './views/horizons.js';
@@ -35,7 +31,6 @@ async function main() {
 
   route('/inbox', renderInbox);
   route('/clarify', renderClarify);
-  route('/todays-plan', renderTodaysPlan);
   route('/next-actions', renderNextActions);
   route('/projects', renderProjects);
   route('/projects/:id', ({ id }) => renderProjectDetail(id));
@@ -45,7 +40,9 @@ async function main() {
   // Old deep link from the section's brief stint as "To-Do Schedule".
   route('/schedule', () => navigate('/calendar'));
   route('/reference', renderReference);
-  route('/review', renderReview);
+  route('/flywheel', renderFlywheel);
+  route('/review', () => navigate('/flywheel'));
+  route('/todays-plan', () => navigate('/next-actions'));
   route('/goals', renderGoals);
   route('/horizons', renderHorizons);
   // Old deep links from the previous 4-tab layout still land somewhere useful.
@@ -124,17 +121,14 @@ function paintBadge(id, count) {
 // (same "pending" set renderSchedule shows above the fold) — Next Actions
 // no longer factor in, since they don't show up on the Calendar page.
 async function updateNavBadges() {
-  const [inboxItems, allActions, waitingItems, projects, calendarItems, dailyItems] = await Promise.all([
+  const [inboxItems, allActions, waitingItems, projects, calendarItems] = await Promise.all([
     DB.getByIndex('items', 'type', 'inbox'),
     DB.getByIndex('items', 'type', 'next-action'),
     DB.getByIndex('items', 'type', 'waiting-for'),
     DB.getAll('projects'),
     DB.getByIndex('items', 'type', 'calendar'),
-    DB.getByIndex('items', 'type', 'daily'),
   ]);
   paintBadge('inbox-badge', inboxItems.length);
-  const plannedProjectIds = new Set(projects.filter(isProjectOnTodaysPlan).map((p) => p.id));
-  paintBadge('todays-plan-badge', allActions.filter((i) => isOnTodaysPlan(i) && !plannedProjectIds.has(i.projectId)).length + plannedProjectIds.size + dailyItems.filter((d) => !isDailyDone(d)).length);
   paintBadge('next-actions-badge', allActions.filter((i) => !i.completed).length);
   paintBadge('waiting-for-badge', waitingItems.filter((i) => !i.completed).length);
   const openProjectItems = [...allActions, ...waitingItems].filter((i) => !i.completed);
