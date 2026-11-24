@@ -1286,13 +1286,13 @@ export async function renderReference() {
 // record in the 'flywheel' store ({ list, text, order, checked }) so edits
 // made on two devices merge item by item during sync. Checks never reset on
 // their own — each list has a manual Reset button.
-// Order here is display order: Daily, then Weekly, then this week's
-// priorities (which sit directly under the Weekly checklist). 'priorities'
+// Order here is display order: this week's priorities at the top, then
+// Daily, then Weekly. 'priorities'
 // uses the same record shape/store as the others, so it syncs the same way.
 const FLYWHEEL_LISTS = [
+  { key: 'priorities', title: 'Priorities / Actions for the Week', noun: 'priority', addLabel: 'Add priority', placeholder: 'Priority or action for this week…', empty: 'No priorities yet. Add what you want to get done this week.' },
   { key: 'daily', title: 'Daily Flywheel', noun: 'daily', empty: 'No daily items yet. Add the steps you want to run through every day.' },
   { key: 'weekly', title: 'Weekly Flywheel', noun: 'weekly', empty: 'No weekly items yet. Add the steps you want to run through every week.' },
-  { key: 'priorities', title: 'Priorities / Actions for the Week', noun: 'priority', addLabel: 'Add priority', placeholder: 'Priority or action for this week…', empty: 'No priorities yet. Add what you want to get done this week.' },
 ];
 
 export async function renderFlywheel() {
