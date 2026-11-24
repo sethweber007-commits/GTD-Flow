@@ -1286,9 +1286,13 @@ export async function renderReference() {
 // record in the 'flywheel' store ({ list, text, order, checked }) so edits
 // made on two devices merge item by item during sync. Checks never reset on
 // their own — each list has a manual Reset button.
+// Order here is display order: Daily, then Weekly, then this week's
+// priorities (which sit directly under the Weekly checklist). 'priorities'
+// uses the same record shape/store as the others, so it syncs the same way.
 const FLYWHEEL_LISTS = [
-  { key: 'weekly', title: 'Weekly Flywheel', empty: 'No weekly items yet. Add the steps you want to run through every week.' },
-  { key: 'daily', title: 'Daily Flywheel', empty: 'No daily items yet. Add the steps you want to run through every day.' },
+  { key: 'daily', title: 'Daily Flywheel', noun: 'daily', empty: 'No daily items yet. Add the steps you want to run through every day.' },
+  { key: 'weekly', title: 'Weekly Flywheel', noun: 'weekly', empty: 'No weekly items yet. Add the steps you want to run through every week.' },
+  { key: 'priorities', title: 'Priorities / Actions for the Week', noun: 'priority', addLabel: 'Add priority', placeholder: 'Priority or action for this week…', empty: 'No priorities yet. Add what you want to get done this week.' },
 ];
 
 export async function renderFlywheel() {
@@ -1298,9 +1302,9 @@ export async function renderFlywheel() {
   const again = () => refresh(renderFlywheel);
   const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || '');
 
-  r.appendChild(pageHeader('Flywheel', 'Your recurring weekly and daily checklists. Edit the items any time; use Reset to clear the checks.'));
+  r.appendChild(pageHeader('Flywheel', 'Your recurring daily and weekly checklists, plus this week’s priorities. Edit the items any time; use Reset to clear the checks.'));
 
-  FLYWHEEL_LISTS.forEach(({ key, title, empty }) => {
+  FLYWHEEL_LISTS.forEach(({ key, title, noun, addLabel, placeholder, empty }) => {
     const items = all.filter((i) => i.list === key).sort(byOrder);
     const done = items.filter((i) => i.checked).length;
 
@@ -1338,18 +1342,20 @@ export async function renderFlywheel() {
         el('div', { class: 'item-actions' }, [
           items.length > 1 ? el('button', { class: 'icon-btn move-btn', title: 'Move up', 'aria-label': 'Move up', disabled: idx === 0, html: iconSvg('chevronUp', 16), onclick: () => swap(-1) }) : null,
           items.length > 1 ? el('button', { class: 'icon-btn move-btn', title: 'Move down', 'aria-label': 'Move down', disabled: idx === items.length - 1, html: iconSvg('chevronDown', 16), onclick: () => swap(1) }) : null,
-          el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openFlywheelForm({ list: key, item: it, onSaved: again }) }),
+          el('button', { class: 'icon-btn', title: 'Edit', html: iconSvg('edit', 16), onclick: () => openFlywheelForm({ list: noun, item: it, placeholder, onSaved: again }) }),
           el('button', { class: 'icon-btn', title: 'Delete', html: iconSvg('trash', 16), onclick: async () => { if (await confirmModal(`Delete "${it.text}"?`)) { await DB.remove('flywheel', it.id); again(); } } }),
         ].filter(Boolean)),
       ]));
     });
     r.appendChild(list);
-    r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: key, nextOrder: items.length, onSaved: again }) }, iconLabel('plus', 'Add item', 13)));
+    r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: noun, storeList: key, nextOrder: items.length, placeholder, onSaved: again }) }, iconLabel('plus', addLabel || 'Add item', 13)));
   });
 }
 
-function openFlywheelForm({ list, item = null, nextOrder = 0, onSaved }) {
-  const input = el('input', { type: 'text', name: 'text', required: true, value: item ? item.text : '', placeholder: 'Checklist item…', autofocus: true });
+// `list` is only the label shown in the modal title; `storeList` is the
+// record's real list key (only needed when adding).
+function openFlywheelForm({ list, storeList = list, item = null, nextOrder = 0, placeholder = 'Checklist item…', onSaved }) {
+  const input = el('input', { type: 'text', name: 'text', required: true, value: item ? item.text : '', placeholder, autofocus: true });
   const form = el('form', { class: 'form' }, [
     el('h3', {}, `${item ? 'Edit' : 'Add'} ${list} item`),
     input,
@@ -1363,7 +1369,7 @@ function openFlywheelForm({ list, item = null, nextOrder = 0, onSaved }) {
     const text = input.value.trim();
     if (!text) return;
     if (item) await DB.put('flywheel', { ...item, text });
-    else await DB.add('flywheel', { list, text, order: nextOrder, checked: false });
+    else await DB.add('flywheel', { list: storeList, text, order: nextOrder, checked: false });
     closeModal();
     onSaved();
   });
