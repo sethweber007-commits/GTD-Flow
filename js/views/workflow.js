@@ -1295,6 +1295,25 @@ const FLYWHEEL_LISTS = [
   { key: 'weekly', title: 'Weekly Flywheel', noun: 'weekly', empty: 'No weekly items yet. Add the steps you want to run through every week.' },
 ];
 
+// Priorities' Reset clears the whole list (it's a fresh week), but keeps a
+// snapshot of what was cleared so it can be restored with "Undo reset" until
+// a new priority is added. Kept in localStorage so it survives a reload; it's
+// per-device (not synced). Restoring re-saves the original records, whose
+// fresh updatedAt beats the delete tombstones, so it also holds up in sync.
+const PRIORITIES_UNDO_KEY = 'gtd-flywheel-priorities-undo';
+function loadPrioritiesUndo() {
+  try {
+    const v = JSON.parse(localStorage.getItem(PRIORITIES_UNDO_KEY) || 'null');
+    return Array.isArray(v) && v.length ? v : null;
+  } catch { return null; }
+}
+function savePrioritiesUndo(records) {
+  try {
+    if (records && records.length) localStorage.setItem(PRIORITIES_UNDO_KEY, JSON.stringify(records));
+    else localStorage.removeItem(PRIORITIES_UNDO_KEY);
+  } catch { /* storage unavailable — undo just won't be offered */ }
+}
+
 export async function renderFlywheel() {
   const r = root();
   r.innerHTML = '';
@@ -1302,20 +1321,39 @@ export async function renderFlywheel() {
   const again = () => refresh(renderFlywheel);
   const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || '');
 
-  r.appendChild(pageHeader('Flywheel', 'Your recurring daily and weekly checklists, plus this week’s priorities. Edit the items any time; use Reset to clear the checks.'));
+  r.appendChild(pageHeader('Flywheel', 'This week’s priorities, plus your recurring daily and weekly checklists. Edit the items any time; Reset clears the checks (or, for priorities, the whole list — with Undo).'));
 
   FLYWHEEL_LISTS.forEach(({ key, title, noun, addLabel, placeholder, empty }) => {
     const items = all.filter((i) => i.list === key).sort(byOrder);
     const done = items.filter((i) => i.checked).length;
 
+    const isPriorities = key === 'priorities';
+    const undoRecords = isPriorities ? loadPrioritiesUndo() : null;
     const heading = el('div', { class: 'flywheel-head' }, [
       el('h3', { class: 'group-heading' }, `${title}${items.length ? ` (${done}/${items.length})` : ''}`),
+      isPriorities && undoRecords && !items.length
+        ? el('button', {
+            class: 'btn btn-ghost btn-small',
+            onclick: async () => {
+              for (const rec of undoRecords) await DB.put('flywheel', rec);
+              savePrioritiesUndo(null);
+              toast('Priorities restored');
+              again();
+            },
+          }, iconLabel('refresh', 'Undo reset', 13))
+        : null,
       items.length
         ? el('button', {
             class: 'btn btn-ghost btn-small',
-            disabled: !done,
+            disabled: !isPriorities && !done,
+            title: isPriorities ? 'Clear all priorities for a new week (can be undone)' : undefined,
             onclick: async () => {
-              for (const it of items) if (it.checked) await DB.put('flywheel', { ...it, checked: false });
+              if (isPriorities) {
+                savePrioritiesUndo(items.map((it) => ({ ...it })));
+                for (const it of items) await DB.remove('flywheel', it.id);
+              } else {
+                for (const it of items) if (it.checked) await DB.put('flywheel', { ...it, checked: false });
+              }
               again();
             },
           }, iconLabel('refresh', 'Reset', 13))
@@ -1348,7 +1386,7 @@ export async function renderFlywheel() {
       ]));
     });
     r.appendChild(list);
-    r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: noun, storeList: key, nextOrder: items.length, placeholder, onSaved: again }) }, iconLabel('plus', addLabel || 'Add item', 13)));
+    r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: noun, storeList: key, nextOrder: items.length, placeholder, onSaved: () => { if (isPriorities) savePrioritiesUndo(null); again(); } }) }, iconLabel('plus', addLabel || 'Add item', 13)));
   });
 }
 
