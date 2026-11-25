@@ -1316,8 +1316,12 @@ function savePrioritiesUndo(records) {
 
 export async function renderFlywheel() {
   const r = root();
-  r.innerHTML = '';
+  // Load data BEFORE clearing, and remember the scroll position: clearing the
+  // page across an await collapses its height and the browser jumps to the top
+  // when a checkbox re-render happens.
   const all = await DB.getAll('flywheel');
+  const scrollY = window.scrollY;
+  r.innerHTML = '';
   const again = () => refresh(renderFlywheel);
   const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || '');
 
@@ -1388,6 +1392,7 @@ export async function renderFlywheel() {
     r.appendChild(list);
     r.appendChild(el('button', { class: 'btn btn-ghost btn-small flywheel-add', onclick: () => openFlywheelForm({ list: noun, storeList: key, nextOrder: items.length, placeholder, onSaved: () => { if (isPriorities) savePrioritiesUndo(null); again(); } }) }, iconLabel('plus', addLabel || 'Add item', 13)));
   });
+  window.scrollTo(0, scrollY);
 }
 
 // `list` is only the label shown in the modal title; `storeList` is the
