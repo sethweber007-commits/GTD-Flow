@@ -4,7 +4,6 @@ import { openItemForm, openProjectForm, openSectionForm, confirmModal, pickSomed
 import { navigate } from '../router.js';
 import { Drive } from '../drive.js';
 import { iconSvg } from '../icons.js';
-import { goalSummary } from './goals.js';
 
 function root() {
   return document.getElementById('view-root');
@@ -95,6 +94,23 @@ async function refresh(renderFn) {
 }
 
 // ---------------------------------------------------------------- INBOX ---
+// Read-only card at the top of the Inbox listing this week's priorities from
+// the Flywheel (flywheel store, list === 'priorities'). Links to the Flywheel.
+async function prioritiesSummary() {
+  const items = (await DB.getAll('flywheel'))
+    .filter((i) => i.list === 'priorities')
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const done = items.filter((i) => i.checked).length;
+  const card = el('a', { class: 'goal-summary', href: '#/flywheel', title: 'Open flywheel' });
+  card.appendChild(el('div', { class: 'goal-summary-head' }, [el('span', { html: iconSvg('flag', 15) }), ` Priorities for the Week${items.length ? ` (${done}/${items.length})` : ''}`]));
+  if (!items.length) {
+    card.appendChild(el('div', { class: 'goal-summary-empty' }, 'Add this week’s priorities in the Flywheel to see them here'));
+    return card;
+  }
+  items.forEach((it) => card.appendChild(el('div', { class: 'priority-summary-row' + (it.checked ? ' done' : '') }, [el('span', { class: 'priority-summary-mark' }, it.checked ? '✓' : '•'), el('span', {}, it.text)])));
+  return card;
+}
+
 export async function renderInbox() {
   const items = (await DB.getByIndex('items', 'type', 'inbox')).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const r = root();
@@ -120,7 +136,7 @@ export async function renderInbox() {
       items.length ? el('button', { class: 'btn btn-primary', onclick: () => navigate('/clarify') }, iconLabel('compass', `Clarify (${items.length})`)) : null,
     ].filter(Boolean))
   );
-  r.appendChild(await goalSummary());
+  r.appendChild(await prioritiesSummary());
   r.appendChild(quickForm);
 
   const list = el('div', { class: 'list' });

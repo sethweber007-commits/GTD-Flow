@@ -597,6 +597,9 @@ select.clarify-input { background: var(--surface); }
 .goal-summary-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .goal-summary-row .goal-pct { text-align: right; }
 .goal-summary-empty { font-size: 13px; color: var(--muted); }
+.priority-summary-row { display: flex; gap: 8px; padding: 3px 0; font-size: 14px; }
+.priority-summary-row.done { color: var(--muted); text-decoration: line-through; }
+.priority-summary-mark { width: 12px; flex: none; text-align: center; }
 
 /* Flywheel */
 .flywheel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
