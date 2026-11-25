@@ -202,7 +202,9 @@ export async function openItemForm({ item = null, type, defaults = {}, onSaved, 
   // category/section field (whichever this type actually renders) instead
   // of re-focusing the already-answered Title field.
   const sectionTarget = focusSection ? form.querySelector('select[name="sectionName"], input[name="category"]') : null;
-  autoFocusField(sectionTarget || form.querySelector('input,textarea'));
+  // A brand-new Next Action starts with the cursor in Context instead of Title.
+  const contextTarget = !isEdit && type === 'next-action' ? form.querySelector('input[name="context"]') : null;
+  autoFocusField(sectionTarget || contextTarget || form.querySelector('input,textarea'));
 }
 
 // -- Project form --
