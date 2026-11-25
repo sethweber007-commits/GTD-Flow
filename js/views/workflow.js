@@ -100,9 +100,8 @@ async function prioritiesSummary() {
   const items = (await DB.getAll('flywheel'))
     .filter((i) => i.list === 'priorities')
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || ''));
-  const done = items.filter((i) => i.checked).length;
   const card = el('a', { class: 'goal-summary', href: '#/flywheel', title: 'Open flywheel' });
-  card.appendChild(el('div', { class: 'goal-summary-head' }, [el('span', { html: iconSvg('flag', 15) }), ` Priorities for the Week${items.length ? ` (${done}/${items.length})` : ''}`]));
+  card.appendChild(el('div', { class: 'goal-summary-head' }, [el('span', { html: iconSvg('flag', 15) }), ' Priorities for the Week']));
   if (!items.length) {
     card.appendChild(el('div', { class: 'goal-summary-empty' }, 'Add this week’s priorities in the Flywheel to see them here'));
     return card;
